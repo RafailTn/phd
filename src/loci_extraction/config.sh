@@ -133,8 +133,15 @@ if [ -z "${PYTHON:-}" ]; then
 fi
 
 # --- inputs -------------------------------------------------------------
-PDF="${PDF:-$PROJ/Supplemental_material.pdf}"      # Jady et al. supplemental tables
-CSV="${CSV:-$PROJ/napRNA_Alu_L1_ACA.csv}"          # napRNAdb Alu/L1 ACA loci (hg38)
+# Looked for at the project root first, then in $PROJ/data, which is the more
+# natural place to drop them on a shared server. Flags override both.
+_cfg_input() {   # _cfg_input <basename>  -> prints the path that exists
+  if [ -e "$PROJ/$1" ]; then echo "$PROJ/$1"
+  elif [ -e "$PROJ/data/$1" ]; then echo "$PROJ/data/$1"
+  else echo "$PROJ/$1"; fi                 # report the root path when missing
+}
+PDF="${PDF:-$(_cfg_input Supplemental_material.pdf)}"   # Jady et al. supplemental tables
+CSV="${CSV:-$(_cfg_input napRNA_Alu_L1_ACA.csv)}"       # napRNAdb Alu/L1 ACA loci (hg38)
 FASTA="${FASTA:-$OUT/AluACA_HE855917-HE856264.fasta}"   # produced by step 01
 
 # --- NCBI ---------------------------------------------------------------
@@ -169,6 +176,17 @@ _cfg_need "bedtools"      "$BEDTOOLS" "--bedtools, --bin, or put it on PATH"
 _cfg_need "python3"       "$PYTHON"   "--python, --bin, or put it on PATH"
 [ -z "$HG38_FA" ] || _cfg_need "genome index" "${HG38_FA}.fai" \
   "run: samtools faidx '$HG38_FA'"
+
+# The project inputs are warnings, not errors: steps 09 and 10 run without
+# them. Reported here anyway so a missing PDF surfaces now, with the flag to
+# fix it, rather than as a bare "Couldn't open file" from pdftotext in step 02.
+for _cfg_pair in "supplemental PDF (steps 02):--pdf:$PDF" \
+                 "NapRNAdb CSV (steps 07,08):--csv:$CSV"; do
+  _cfg_lbl="${_cfg_pair%%:*}"; _cfg_rest2="${_cfg_pair#*:}"
+  _cfg_flag="${_cfg_rest2%%:*}"; _cfg_path="${_cfg_rest2#*:}"
+  [ -e "$_cfg_path" ] || echo "WARNING missing $_cfg_lbl: $_cfg_path" \
+    "(set it with $_cfg_flag, or put it in \$PROJ or \$PROJ/data)" >&2
+done
 
 [ "$_cfg_missing" -eq 0 ] || {
   echo "" >&2

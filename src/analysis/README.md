@@ -81,3 +81,49 @@ entirely false "paralogous copies elsewhere, zero coordinate overlap"
 conclusion. The tell was that every FASTA length disagreed with its assumed
 coordinate span. Do not infer coordinates from an identifier that merely looks
 familiar; find the sequence in the genome.
+
+## collapse_duplicates.py
+
+Merges `snoRNA.txt.fa` and `AluACA_union_nr.fasta` into one non-redundant
+catalogue, resolving the 15 loci that both files contain.
+
+```bash
+python3 scripts/analysis/collapse_duplicates.py \
+  --sno snoRNA.txt.fa --union AluACA_union_nr.fasta \
+  --out AluACA_snoRNA_merged_nr.fasta \
+  --report AluACA_snoRNA_collapse_report.tsv \
+  --bed AluACA_union_nr.bed --bed-out AluACA_union_nr.collapsed.bed
+```
+
+All 15 pairs are exact substring relationships -- there are no internal
+substitutions -- so containment finds them and no alignment is needed. Which
+member survives, in order: identical -> the union record; exactly one ending
+canonically (`ACA` box 3 nt from the 3' end) -> that one; otherwise the
+difference is 5'-only, and a 5' difference of `--offset-tol` nt or less
+(default 1) is treated as a coordinate off-by-one in favour of the union,
+while a larger one keeps whichever sequence carries more of the 5' hairpin.
+
+Expected output:
+
+```
+corrected 1 BED interval(s) -> AluACA_union_nr.collapsed.bed
+pairs collapsed: 15  (union kept 14, snoDB sequence kept 1)
+  identical                6
+  union-ACA-canonical      4
+  5prime-offset            3
+  longer-5prime-hairpin    2
+merged records: 1936 + 765 = 2701 -> AluACA_snoRNA_merged_nr.fasta
+```
+
+The surviving record always keeps the union header so the merged file has one
+naming scheme. The single case where the snoDB *sequence* wins is
+`AluACA163` / `SNODB2089`: `AluACA163` is a Jady et al. deposit and those are
+3'-half only by design, so `SNODB2089` supplies 36 nt of the omitted 5'
+hairpin. That extension is genomic (verified against hg38), so `--bed-out`
+writes the corrected interval, chr19:23751717-23751832(-). Re-extracting the
+corrected BED reproduces all 765 union sequences in the merged FASTA exactly.
+
+One duplicate sequence survives on purpose: `hsa-novel-ACA-462` and
+`hsa-novel-ACA-463` are identical over 262 nt but sit ~3 kb apart on chr19
+(50101890 and 50104953, both `-`). They are two real loci, not a cataloguing
+artefact, so collapsing them would lose one.
