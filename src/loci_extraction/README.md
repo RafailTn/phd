@@ -1,8 +1,8 @@
 # AluACA → hg38 mapping pipeline
 
-Places the 348 AluACA RNA genes deposited by Jády, Ketele & Kiss
-(EMBL `HE855917`–`HE856264`) onto hg38, then compares them to the napRNAdb
-Alu/L1 ACA loci in `napRNA_Alu_L1_ACA.csv`.
+Places the 348 AluACA RNA genes deposited by Jády, Ketele & Kiss [1]
+(EMBL `HE855917`–`HE856264`) onto hg38, then compares them to the NapRNAdb
+Alu/L1 ACA loci in `napRNA_Alu_L1_ACA.csv` [2,3].
 
 Run everything with:
 
@@ -19,6 +19,7 @@ bash scripts/run_all.sh
 | `AluACA_hg38.bed` | the same as BED6 |
 | `AluACA_unresolved.tsv` | the 4 that could not be placed unambiguously |
 | `AluACA_union_nr.{bed,tsv,fasta}` | the 765-locus union set (see below) |
+| `snoDB_with_AluACA_union.{tsv,fasta}` | the snoDB 2.0 catalogue with its AluACA tier swapped for the union - 2533 entries (see below) |
 
 ## Steps
 
@@ -31,8 +32,9 @@ bash scripts/run_all.sh
 | `05_locate_in_genes.sh` + `lib_locate.py` | exact search inside each host gene |
 | `06_genome_search.py` | genome-wide exact search for the leftovers |
 | `07_assemble_and_match.sh` | merge, compare to the CSV, write deliverables |
-| `08_build_union.sh` | non-redundant union with the napRNAdb loci |
+| `08_build_union.sh` | non-redundant union of the AluACA and NapRNAdb loci |
 | `09_add_repeat_family.sh` | annotate each locus with its RepeatMasker element |
+| `10_replace_aluaca_in_snodb.sh` | swap snoDB's AluACA tier for the union set (optional; needs the snoDB TSV) |
 
 `csv_overlap_check.sh` is standalone and unrelated to the mapping — it checks
 whether the two `napRNA_Alu_L1_*.csv` files overlap.
@@ -44,8 +46,8 @@ genome-wide aligner returns hundreds of equally good hits per sequence,
 because hg38 contains over a million Alu copies — alignment alone cannot
 place them.
 
-What makes the mapping tractable is Supplemental Table 3, which names the
-**host gene** for each AluACA. The pipeline therefore restricts the search
+What makes the mapping tractable is Supplemental Table 3 of [1], which names
+the **host gene** for each AluACA. The pipeline therefore restricts the search
 space to that gene's span and requires an *exact* match. That yields 325
 unique placements. Only the 23 sequences with no usable gene assignment go to
 a genome-wide search, which resolves 19 more uniquely.
@@ -55,7 +57,7 @@ Two independent signals say the approach is sound:
 - **AluACA55** was assigned only a truncated `MBOAT` in the table, yet the
   genome-wide search independently placed it inside **MBOAT1**.
 - **10 of the 12** "No apparent host gene" entries land **intergenic**,
-  matching the paper's own claim.
+  matching the claim made in [1].
 
 ## Results
 
@@ -69,8 +71,8 @@ AluACA sits *inside* its CSV locus sharing one end; 119 of 122 are fully
 contained.
 
 The 222 non-matches are **not** a coordinate-shift artifact — they sit a
-median of 1.18 Mb from the nearest CSV locus. Jády's 348 AluACAs and
-napRNAdb's 543 Alu/L1 ACA entries are two overlapping but substantially
+median of 1.18 Mb from the nearest CSV locus. The 348 AluACAs of [1] and the
+543 Alu/L1 ACA entries of NapRNAdb [2] are two overlapping but substantially
 independent sets, sharing only ~120 loci. Worth knowing before treating
 either as the canonical AluACA list.
 
@@ -103,6 +105,49 @@ either as the canonical AluACA list.
    `BAT3`→`BAG6`, …), resolved via NCBI Gene and validated against GENCODE.
 6. **Duplicate GENCODE entries** for one symbol can yield identical
    coordinates (e.g. `CA5BP1`), which looks like a multi-hit; deduplicated.
+
+## Data sources
+
+| file | origin |
+|---|---|
+| `AluACA_HE855917-HE856264.fasta` | EMBL `HE855917`–`HE856264`, deposited with [1] |
+| `Supplemental_material.pdf` | supplemental tables of [1]; Table 3 lists the AluACA host genes |
+| `napRNA_Alu_L1_ACA.csv`, `napRNA_Alu_L1_polyApocketACA.csv` | NapRNAdb [2]; all 543 rows cite PMID 38499544, the NAP-seq study [3] the loci derive from |
+| `GRCh38.primary_assembly.genome.fa` | GENCODE / GRCh38 primary assembly |
+| `gencode.v47.primary_assembly.annotation.gtf.gz` | GENCODE release 47 |
+| `hg38_rmsk.gtf.gz` | UCSC Genome Browser `rmsk` table (RepeatMasker annotation) |
+| `snoDB_All_V2.0.tsv` | snoDB 2.0 [4] full human export; step 10 only |
+
+## References
+
+1. Jády BE, Ketele A, Kiss T. **Human intron-encoded Alu RNAs are processed and
+   packaged into Wdr79-associated nucleoplasmic box H/ACA RNPs.**
+   *Genes & Development* 2012;26(17):1897–1910.
+   doi:[10.1101/gad.197467.112](https://doi.org/10.1101/gad.197467.112) ·
+   PMID [22892240](https://pubmed.ncbi.nlm.nih.gov/22892240/)
+
+2. Xuan J, Xiao C, Luo Y, Tang S, Pang J, Chen Z, Liu W, He QY. **NapRNAdb: a
+   multispecies repository and analytical platform for napRNA discovery and
+   functional annotation.** *Nucleic Acids Research* 2026;54(D1):D226–D238.
+   doi:[10.1093/nar/gkaf1100](https://doi.org/10.1093/nar/gkaf1100) ·
+   PMID [41182820](https://pubmed.ncbi.nlm.nih.gov/41182820/)
+
+3. Liu S, Huang J, Zhou J, Chen S, Zheng W, Liu C, Lin Q, Zhang P, Wu D, He S,
+   Ye J, Liu S, Zhou K, Li B, Qu L, Yang J. **NAP-seq reveals multiple classes
+   of structured noncoding RNAs with regulatory functions.**
+   *Nature Communications* 2024;15(1):2425.
+   doi:[10.1038/s41467-024-46596-y](https://doi.org/10.1038/s41467-024-46596-y) ·
+   PMID [38499544](https://pubmed.ncbi.nlm.nih.gov/38499544/)
+
+4. Bergeron D, Paraqindes H, Fafard-Couture É, Deschamps-Francoeur G,
+   Faucher-Giguère L, Bouchard-Bourelle P, Abou Elela S, Catez F, Marcel V,
+   Scott MS. **snoDB 2.0: an enhanced interactive database, specializing in
+   human snoRNAs.** *Nucleic Acids Research* 2023;51(D1):D291–D296.
+   doi:[10.1093/nar/gkac835](https://doi.org/10.1093/nar/gkac835) ·
+   PMID [36165892](https://pubmed.ncbi.nlm.nih.gov/36165892/)
+   (original release: Bouchard-Bourelle P *et al.*, *Nucleic Acids Research*
+   2020;48(D1):D220–D225,
+   doi:[10.1093/nar/gkz884](https://doi.org/10.1093/nar/gkz884))
 
 ## Requirements
 
@@ -170,7 +215,7 @@ and nothing written into the project directory.
 
 ## Union set (`08_build_union.sh`)
 
-Merges the placed Jady AluACAs with the napRNAdb loci, into a single
+Merges the placed AluACAs of [1] and the NapRNAdb loci of [2] into a single
 non-redundant set of 765 intervals.
 
 | file | contents |
@@ -178,6 +223,14 @@ non-redundant set of 765 intervals.
 | `AluACA_union_nr.bed` | 765 intervals, BED6+1 (with `repeat_family`) |
 | `AluACA_union_nr.fasta` | the same 765, stranded sequence from hg38 |
 | `AluACA_union_nr.tsv` | BED6 + `source` + `repeat_family` |
+
+FASTA headers follow the `snoRNA.txt.fa` convention - `>name.idN`, with the
+sequence on one unwrapped uppercase line - so the file concatenates with that
+catalogue. Numbering runs `id3001`-`id3765`, starting above the highest id in
+`snoRNA.txt.fa` (`id2089`) so the two sets never collide. The format is a
+single token, so the `|` joining a shared locus's two identifiers becomes `_`
+(`AluACA184_hsa-novel-ACA-179.id3002`); the `|` form is kept in the BED and TSV.
+Set `FASTA_ID_BASE` to renumber.
 
 **Where the two sets share a locus, the longer interval wins** and both
 identifiers are joined in the name. This matters because the deposited AluACA
@@ -187,12 +240,28 @@ column records which set each interval's coordinates actually came from:
 
 | `source` | n | coordinates from |
 |---|---|---|
-| `naprnadb_only` | 422 | CSV, no AluACA at this locus |
+| `naprnadb_only` | 422 | NapRNAdb, no AluACA at this locus |
 | `jady_aluaca` | 222 | AluACA, no CSV locus here |
 | `both_naprnadb` | 120 | shared locus, CSV interval was longer |
 | `both_jady` | 1 | shared locus, AluACA interval was longer |
 
 Zero residual overlaps on either strand, zero duplicate names.
+
+### The optional length filter (`--max-len`)
+
+Longest-wins admits some intervals that are hard to read as ACA RNAs. Eleven
+NapRNAdb novel-ACA entries run to whole kilobases (up to 6.9 kb) - more like a
+host intron or a LINE than an RNA. `--max-len N` drops intervals of N nt or
+more; it is **off by default** (`MAXLEN=0`), so the 765 loci above include all
+eleven.
+
+`--max-len 1000` gives a 756-locus set. Nine of the eleven are NapRNAdb-only
+and simply go. The other two, **AluACA233** / hsa-novel-ACA-472 (1785 nt) and
+**AluACA280** / hsa-novel-ACA-662 (3149 nt), are shared loci carrying a real
+AluACA, so the kb-long *partner* is discarded rather than the locus: both fall
+back to their 78-79 nt AluACA interval and move from `both_naprnadb` to
+`both_jady` (1 → 3). No AluACA is lost either way, and the longest surviving
+interval is 913 nt.
 
 The 121 shared loci pair 1:1 - no AluACA matches two CSV loci or vice versa.
 The CSV interval is longer in 119, AluACA15 wins by 1 bp, and AluACA21 /
@@ -205,7 +274,8 @@ Two things the numbers hide:
   chr20:416898-416974 - a duplicate in the original submission, not a mapping
   error. Collapsed to one row.
 - **The two sources are not length-comparable.** Jady-only intervals are
-  71-162 nt; napRNAdb intervals have a median of 182 nt and run to 6859 nt.
+  73-162 nt; NapRNAdb intervals have a median of 178 nt and run to 6859 nt
+  (913 nt if you enable `--max-len 1000`).
   Anything that scales with interval length - coverage, peak overlap - needs
   normalising or the union will look source-biased.
 
@@ -227,14 +297,67 @@ ordered by overlap length: `AluSx`, or `AluJb|AluSx1` where a locus spans two.
 Overlap is computed without a strand requirement, and non-Alu elements are
 shown rather than hidden.
 
-**All 765 loci sit in an annotated repeat; none are repeat-free.** All 223
+**All 765 loci sit in an annotated repeat; none are repeat-free.** All 222
 Jády-only AluACAs are Alu-dominant, as they must be. The 39 that are not are
-napRNAdb-derived and are mostly L1 (the CSV is an Alu *and LINE1* set) plus a
+NapRNAdb-derived and are mostly L1 (the CSV is an Alu *and LINE1* set) plus a
 few FLAM/FRAM Alu monomers and MLT/MER LTR fragments. Loci spanning more than
 one element are listed in overlap order, e.g. `L1MC4|L1MC4a|AluJb`.
 
-Cross-checked against napRNAdb's own repeat call (CSV column 9) for all 422
-shared loci: **zero genuine disagreements.** The CSV's element is the top hit
-by overlap in 389, and one of the secondary elements in the other 33 — so the
+Cross-checked against NapRNAdb's own repeat call (CSV `Gene` column) for all
+542 loci the CSV contributes: **zero genuine disagreements.** The CSV's element
+is the top hit by overlap in 507 and a secondary element in the other 35 — so the
 two annotations differ only in which element of a multi-element locus gets
 called dominant, never in identity.
+
+## snoDB catalogue with the union swapped in (`10_replace_aluaca_in_snodb.sh`)
+
+Optional, and independent of everything above: takes the full snoDB 2.0 human
+export [4] and replaces its AluACA tier with the 765-locus union, giving a
+single annotation file usable as a counting reference.
+
+| file | contents |
+|---|---|
+| `snoDB_with_AluACA_union.tsv` | 2533 entries, `chrom start end name score strand origin box_type` |
+| `snoDB_with_AluACA_union.fasta` | the same 2533, stranded sequence from hg38 |
+
+2123 snoDB entries − 352 `box_type == "AluACA"` − 3 duplicates + 765 = **2533**.
+
+| `box_type` | n |
+|---|---|
+| C/D | 1107 |
+| **Alu-ACA** | **765** |
+| H/ACA | 507 |
+| SNORD-like | 116 |
+| scaRNA | 33 |
+| unknown | 4 |
+| telomerase RNA | 1 |
+
+`origin` is `snoDB` or `AluACA_union`; `box_type` keeps snoDB's own value for
+retained rows and is `Alu-ACA` for every union locus.
+
+**Coordinates.** The snoDB export is **1-based inclusive** - verified, not
+assumed: `end - start + 1` equals its own `length` column for all 2123 rows.
+The union is BED, 0-based half-open. The output is BED throughout (snoDB starts
+decremented), so columns 1-6 are a valid BED6.
+
+That conversion is then checked against snoDB's own `sequence` column, since
+sequence is pulled from hg38 rather than copied: **1768 compared, 1768
+identical, 0 differing.** An off-by-one would have failed all 1768. The script
+prints this on every run, so a release with a different convention surfaces
+immediately instead of silently shifting every coordinate.
+
+**Three retained rows were dropped as duplicates.** `SNODB2087`, `SNODB2072`
+and `SNODB2065` are classified `H/ACA` rather than `AluACA`, so the box_type
+filter missed them, but they sit on union loci (`hsa-novel-ACA-265`, `-516`,
+`-418`) on the same strand. The rule is computed rather than hardcoded - any
+retained row overlapping a union locus same-strand goes - so it still catches
+whatever is redundant in a different snoDB release. Antisense pairs are kept:
+a snoRNA on the opposite strand is a different RNA.
+
+**Names are unique** (0 duplicates across 2533), which matters for a counting
+reference. snoDB's `gene_name` is empty for 733 rows and duplicated for 50, so
+a row falls back to its `snodb_id` and any remaining collision gets the id
+appended (`SNORD66_snoDB1753`).
+
+Input path defaults to `$PROJ/snoDB_All_V2.0.tsv`; override with
+`SNODB_TSV=... bash scripts/loci_extraction/10_replace_aluaca_in_snodb.sh`.

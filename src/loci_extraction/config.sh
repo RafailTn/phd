@@ -32,6 +32,8 @@ AluACA -> hg38 pipeline - configuration flags
   --gencode FILE     GENCODE annotation GTF(.gz)
   --rmsk FILE        UCSC RepeatMasker table (tab-separated, gzipped ok)
                      required by step 09 only
+  --max-len N        drop union intervals of N nt or longer
+                     default 0 = no length filter
 
   --csv FILE         napRNAdb Alu/L1 ACA CSV
   --pdf FILE         Jady et al. supplemental PDF
@@ -48,8 +50,8 @@ AluACA -> hg38 pipeline - configuration flags
   -h, --help         show this and exit
 
 Environment variables of the same name in upper snake case (PROJ, OUT, WORK,
-HG38_DIR, HG38_FA, GENCODE, RMSK, CSV, PDF, FASTA, BIN, BEDTOOLS, PYTHON,
-ACC_FROM, ACC_TO) are honoured as defaults; flags win over them.
+HG38_DIR, HG38_FA, GENCODE, RMSK, MAXLEN, CSV, PDF, FASTA, BIN, BEDTOOLS,
+PYTHON, ACC_FROM, ACC_TO) are honoured as defaults; flags win over them.
 USAGE
 }
 
@@ -66,6 +68,7 @@ while [ "$#" -gt 0 ]; do
     --hg38-fa)   HG38_FA="$2";   shift 2 ;;
     --gencode)   GENCODE="$2";   shift 2 ;;
     --rmsk)      RMSK="$2";      shift 2 ;;
+    --max-len)   MAXLEN="$2";    shift 2 ;;
     --csv)       CSV="$2";       shift 2 ;;
     --pdf)       PDF="$2";       shift 2 ;;
     --fasta)     FASTA="$2";     shift 2 ;;
@@ -81,8 +84,19 @@ done
 set -- ${_cfg_rest[@]+"${_cfg_rest[@]}"}
 
 # --- project layout -----------------------------------------------------
+# The project root is found by walking up from this file until a directory
+# holding the pipeline's inputs turns up, so the scripts can be nested at any
+# depth (scripts/, scripts/loci_extraction/, ...) without breaking.
 _cfg_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PROJ="${PROJ:-$(dirname "$_cfg_dir")}"
+if [ -z "${PROJ:-}" ]; then
+  PROJ="$_cfg_dir"
+  while [ "$PROJ" != "/" ]; do
+    if [ -e "$PROJ/napRNA_Alu_L1_ACA.csv" ] || [ -d "$PROJ/deps" ]; then break; fi
+    PROJ="$(dirname "$PROJ")"
+  done
+  # nothing recognisable found: fall back to the parent of the scripts dir
+  [ "$PROJ" = "/" ] && PROJ="$(dirname "$_cfg_dir")"
+fi
 OUT="${OUT:-$PROJ}"
 WORK="${WORK:-$OUT/work_map}"
 
@@ -99,6 +113,11 @@ if [ -z "${GENCODE:-}" ]; then
   [ -e "$GENCODE" ] || GENCODE="$(ls -1 "$HG38_DIR"/gencode*.gtf.gz 2>/dev/null | head -1 || true)"
 fi
 RMSK="${RMSK:-$HOME/Downloads/transposon_proj/data/hg38_rmsk.gtf.gz}"
+
+# Optional length filter on the union (step 08): a handful of NapRNAdb entries
+# span whole kilobases -- a host intron or a LINE, not an ACA RNA. 0 keeps
+# everything; --max-len 1000 drops the 9 kb-long NapRNAdb-only loci.
+MAXLEN="${MAXLEN:-0}"
 
 # --- tools --------------------------------------------------------------
 # Prefer the project's pixi env when it exists; otherwise fall back to PATH so
@@ -125,7 +144,7 @@ ACC_TO="${ACC_TO:-HE856264}"
 # NCBI allows 3 requests/sec without an API key; steps that loop sleep 0.4s.
 NCBI_TOOL="${NCBI_TOOL:-claude_code}"
 
-export PROJ OUT WORK HG38_DIR HG38_FA GENCODE RMSK BIN BEDTOOLS PYTHON \
+export PROJ OUT WORK HG38_DIR HG38_FA GENCODE RMSK MAXLEN BIN BEDTOOLS PYTHON \
        PDF CSV FASTA EUTILS ACC_FROM ACC_TO NCBI_TOOL
 
 mkdir -p "$WORK" "$OUT"

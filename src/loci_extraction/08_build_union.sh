@@ -2,13 +2,20 @@
 # Step 08 - Non-redundant union of the two AluACA locus sets.
 #
 #   set A: the 344 placed Jady AluACAs           (AluACA_hg38.bed)
-#   set B: the 543 napRNAdb Alu/L1 ACA loci      (napRNA_Alu_L1_ACA.csv)
+#   set B: the 543 NapRNAdb Alu/L1 ACA loci      (napRNA_Alu_L1_ACA.csv)
 #
 # 121 loci are shared. Because the deposited AluACA sequences are 3'-partial
 # (median 79 nt) while the CSV carries the ~160 nt full element, the two sets
 # describe the same locus at different extents. Where they overlap the union
 # keeps the LONGER interval and joins both identifiers, so no locus is
 # represented by a truncated interval.
+#
+# An optional length filter drops intervals >= MAXLEN nt, for the handful of
+# NapRNAdb novel-ACA entries that run to several kb -- a host intron or a LINE
+# rather than an RNA. It is OFF by default (MAXLEN=0); --max-len 1000 enables
+# it and removes 9 loci. At a shared locus the kb-long partner is discarded
+# rather than the locus: the AluACA interval is used instead, so no AluACA is
+# lost either way.
 #
 # One genuine within-set duplicate is collapsed first: AluACA88 (HE856004) and
 # AluACA345 (HE856261) are byte-identical sequences deposited twice, both in
@@ -35,16 +42,25 @@ sort -k1,1 -k2,2n "$OUT/AluACA_hg38.bed" > "$W/aluaca_raw.bed"
 
 # shared loci: pair them up, then keep whichever interval is longer
 "$BEDTOOLS" intersect -a "$W/aluaca.bed" -b "$W/csv.bed" -wa -wb -s > "$W/pairs.tsv"
-awk -F'\t' -v OFS='\t' '
+# ... except that with --max-len a kb-long partner is never the one kept: fall
+# back to the shorter interval instead of dropping a locus with a real AluACA.
+awk -F'\t' -v OFS='\t' -v MAX="$MAXLEN" '
   { la=$3-$2; lc=$9-$8
-    if (la > lc) print $1,$2,$3,$4"|"$10,0,$6,"both_jady"
-    else         print $7,$8,$9,$4"|"$10,0,$12,"both_naprnadb" }' "$W/pairs.tsv" > "$W/shared.bed7"
+    jady = (la > lc)
+    if (MAX > 0) {
+      if ( jady && la >= MAX && lc < MAX) jady = 0
+      if (!jady && lc >= MAX && la < MAX) jady = 1
+      if (la >= MAX && lc >= MAX) next
+    }
+    if (jady) print $1,$2,$3,$4"|"$10,0,$6,"both_jady"
+    else      print $7,$8,$9,$4"|"$10,0,$12,"both_naprnadb" }' \
+  "$W/pairs.tsv" > "$W/shared.bed7"
 
 # the rest of each set, untouched
 "$BEDTOOLS" intersect -a "$W/aluaca.bed" -b "$W/csv.bed" -v -s \
-  | awk -v OFS='\t' '{print $1,$2,$3,$4,0,$6,"jady_aluaca"}'   > "$W/jady_only.bed7"
+  | awk -v OFS='\t' -v MAX="$MAXLEN" 'MAX<=0||($3-$2)<MAX{print $1,$2,$3,$4,0,$6,"jady_aluaca"}'   > "$W/jady_only.bed7"
 "$BEDTOOLS" intersect -a "$W/csv.bed" -b "$W/aluaca.bed" -v -s \
-  | awk -v OFS='\t' '{print $1,$2,$3,$4,0,$6,"naprnadb_only"}' > "$W/csv_only.bed7"
+  | awk -v OFS='\t' -v MAX="$MAXLEN" 'MAX<=0||($3-$2)<MAX{print $1,$2,$3,$4,0,$6,"naprnadb_only"}' > "$W/csv_only.bed7"
 
 cat "$W/shared.bed7" "$W/jady_only.bed7" "$W/csv_only.bed7" \
   | sort -k1,1 -k2,2n > "$W/union.bed7"
@@ -53,11 +69,25 @@ cut -f1-6 "$W/union.bed7" > "$OUT/AluACA_union_nr.bed"
 { printf "chrom\tstart\tend\tname\tscore\tstrand\tsource\n"; cat "$W/union.bed7"; } \
   > "$OUT/AluACA_union_nr.tsv"
 
-# stranded sequence straight from hg38, so both sources are on equal footing
+# stranded sequence straight from hg38, so both sources are on equal footing.
+# Headers follow the snoRNA.txt.fa convention -- ">name.idN", one unwrapped
+# uppercase sequence line -- so the file concatenates with that catalogue.
+# Numbering starts above the highest id there (2089) so the two never collide,
+# and "|" in a joined name becomes "_" because the format is a single token.
+FASTA_ID_BASE="${FASTA_ID_BASE:-3000}"
 "$BEDTOOLS" getfasta -fi "$HG38_FA" -bed "$OUT/AluACA_union_nr.bed" -s -name \
-  | sed -E 's/^>([^:]+)::/>\1 /' > "$OUT/AluACA_union_nr.fasta"
+  | awk -v BASE="$FASTA_ID_BASE" '
+      /^>/ { if (n) print h "\n" s
+             h = $0; sub(/::.*$/, "", h); gsub(/\|/, "_", h)
+             h = h ".id" (BASE + ++i); s = ""; n = 1; next }
+      { s = s toupper($0) }
+      END { if (n) print h "\n" s }' > "$OUT/AluACA_union_nr.fasta"
 
-echo "[08] union summary"
+if [ "${MAXLEN:-0}" -gt 0 ]; then
+  echo "[08] union summary  (length filter: intervals >= $MAXLEN nt dropped)"
+else
+  echo "[08] union summary  (no length filter)"
+fi
 cut -f7 "$W/union.bed7" | sort | uniq -c | awk '{printf "  %-16s %s\n",$2,$1}'
 echo "  union intervals:               $(wc -l < "$OUT/AluACA_union_nr.bed")"
 echo "  fasta records:                 $(grep -c '^>' "$OUT/AluACA_union_nr.fasta")"
