@@ -266,9 +266,6 @@ def main():
               f"of the shorter sequence), by identity:")
         for band in sorted(hist, reverse=True):
             print(f"    {band:3d}-{band + 4}%  {hist[band]:4d}  {'#' * min(hist[band], 60)}")
-        print("\n  A cut anywhere below ~99% is a judgement call, not a natural "
-              "break:\n  Alu-derived sequences sit at 80-90% identity to each "
-              "other by ancestry alone.")
 
     if args.out:
         with open(args.out, "w") as fh:
