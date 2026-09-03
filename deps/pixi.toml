@@ -8,6 +8,7 @@ version = "0.1.0"
 [tasks]
 
 [dependencies]
+python  = ">=3.11,<3.13"   
 bedtools = ">=2.31.1,<3"
 sra-tools = ">=3.4.1,<4"
 star = ">=2.7.11b,<3"
@@ -23,4 +24,10 @@ genmap = ">=1.3.0,<2"
 pigz = ">=2.8,<3"
 emboss = ">=6.6.0,<7"
 pdftotext = ">=4.0.0,<5"
+pandas  = ">=2.2,<3"      
+viennarna = ">=2.6,<3"     
+parallel  = "*"            
+fire = ">=0.7.1,<0.8"
 
+[pypi-dependencies]
+seqflow = ">=0.1.4, <0.2"
