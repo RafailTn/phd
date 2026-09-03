@@ -1,15 +1,19 @@
 # Cross-referencing the union against another catalogue
 
-Two standalone scripts, independent of the `loci_extraction/` pipeline. Neither
-sources `config.sh`; every path is an argument.
+Three standalone scripts, independent of the `loci_extraction/` pipeline. They
+do not source `config.sh`, but `paths.py` reproduces its lookup rules, so every
+path has a working default and every path can still be overridden by flag --
+see [Finding inputs](#finding-inputs).
 
 | script | question it answers |
 |---|---|
 | `snorna_overlap.py` | do the two FASTAs contain the same sequences? |
 | `snorna_locate.py` | do they describe the same genomic loci? |
+| `collapse_duplicates.py` | merge them, resolving the loci both files hold |
 
-Run both. Sequence agreement and coordinate agreement are separate claims, and
-each caught an error in the other during this analysis.
+Run the first two before the third. Sequence agreement and coordinate agreement
+are separate claims, and each caught an error in the other during this
+analysis.
 
 ## `snorna_overlap.py`
 
@@ -88,12 +92,23 @@ Merges `snoRNA.txt.fa` and `AluACA_union_nr.fasta` into one non-redundant
 catalogue, resolving the 15 loci that both files contain.
 
 ```bash
+python3 scripts/analysis/collapse_duplicates.py
+```
+
+Every path has a default -- see [Finding inputs](#finding-inputs) -- so that
+bare form is usually enough. Override any of it explicitly:
+
+```bash
 python3 scripts/analysis/collapse_duplicates.py \
-  --sno snoRNA.txt.fa --union AluACA_union_nr.fasta \
+  --sno data/snoRNA.txt.fa --union data/AluACA_union_nr.fasta \
   --out AluACA_snoRNA_merged_nr.fasta \
   --report AluACA_snoRNA_collapse_report.tsv \
-  --bed AluACA_union_nr.bed --bed-out AluACA_union_nr.collapsed.bed
+  --bed data/AluACA_union_nr.bed --bed-out AluACA_union_nr.collapsed.bed
 ```
+
+A missing `--sno` or `--union` is fatal and names the three directories that
+were searched. A missing `--bed` is not: the merge still runs and the
+coordinate correction is skipped with a note.
 
 All 15 pairs are exact substring relationships -- there are no internal
 substitutions -- so containment finds them and no alignment is needed. Which
@@ -127,3 +142,50 @@ One duplicate sequence survives on purpose: `hsa-novel-ACA-462` and
 `hsa-novel-ACA-463` are identical over 262 nt but sit ~3 kb apart on chr19
 (50101890 and 50104953, both `-`). They are two real loci, not a cataloguing
 artefact, so collapsing them would lose one.
+
+
+## Finding inputs
+
+All three scripts share `paths.py`, which mirrors `loci_extraction/config.sh`
+so the two halves of the project agree on where things live:
+
+| what | looked for in, in order |
+| --- | --- |
+| inputs | `./`, then `$PROJ/`, then `$PROJ/data/` |
+| outputs | `$OUT`, or `$PROJ` when `OUT` is unset |
+| tools (`bedtools`, `water`) | `--flag`, `$BEDTOOLS`/`$WATER`, `$BIN`, `$PROJ/deps/.pixi/envs/default/bin`, `PATH` |
+
+`$PROJ` comes from the environment when set, otherwise from walking up from
+`scripts/analysis/` until a directory holds `deps/`, or holds one of the
+project's marker files (`napRNA_Alu_L1_ACA.csv`, `snoRNA.txt.fa`,
+`AluACA_union_nr.fasta`, `Supplemental_material.pdf`) either at its root or in
+its `data/`. Several markers rather than one because a checkout may have the
+raw inputs but not the outputs, or the reverse; anchoring on a single file
+leaves `$PROJ` pointing at `scripts/`.
+
+So on a server with everything under `data/`, all three run bare from
+anywhere:
+
+```bash
+python3 scripts/analysis/snorna_overlap.py --align
+python3 scripts/analysis/collapse_duplicates.py
+```
+
+**The one exception is the genome.** `snorna_locate.py --genome` defaults to
+`$HG38_FA`, then to a lookup for `GRCh38.primary_assembly.genome.fa` in the
+three directories above. A 3 GB assembly normally lives outside the project,
+so that lookup usually fails and you must either export `HG38_FA` (as
+`config.sh` already does) or pass `--genome`:
+
+```bash
+HG38_FA=/path/to/GRCh38.primary_assembly.genome.fa \
+  python3 scripts/analysis/snorna_locate.py
+```
+
+A missing input is fatal and names the three directories searched. A missing
+`--bed` in `collapse_duplicates.py` is not: the merge runs and the coordinate
+correction is skipped with a note.
+
+Note that the current directory is consulted first, so running from an
+unrelated directory that happens to contain a same-named file will silently
+pick that one up.

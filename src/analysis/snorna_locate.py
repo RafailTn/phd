@@ -38,6 +38,8 @@ import subprocess
 import shutil
 import sys
 
+from paths import find_input, find_tool, out_path, require
+
 COMP = str.maketrans("ACGTN", "TGCAN")
 
 
@@ -72,13 +74,23 @@ def find_all(hay, needle):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--fasta", required=True, help="FASTA to place (no coordinates)")
-    p.add_argument("--genome", required=True, help="genome FASTA (uncompressed)")
-    p.add_argument("--bed", help="BED to intersect the placements against")
-    p.add_argument("--out", required=True, help="output BED of placements")
+    p.add_argument("--fasta", default=find_input("snoRNA.txt.fa"),
+                   help="FASTA to place (no coordinates)")
+    p.add_argument("--genome",
+                   default=os.environ.get("HG38_FA")
+                           or find_input("GRCh38.primary_assembly.genome.fa"),
+                   help="genome FASTA (uncompressed); $HG38_FA is honoured")
+    p.add_argument("--bed", default=find_input("AluACA_union_nr.bed"),
+                   help="BED to intersect the placements against")
+    p.add_argument("--out", default=out_path("work_map/snorna_placed.bed"),
+                   help="output BED of placements")
     p.add_argument("--prefix", help="only place records whose name starts with this")
     p.add_argument("--bedtools", default=None)
     args = p.parse_args()
+
+    require([("FASTA to place (--fasta)", args.fasta),
+             ("genome FASTA (--genome)", args.genome)])
+    os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
 
     queries = read_fasta(args.fasta, args.prefix)
     if not queries:
@@ -124,7 +136,7 @@ def main():
 
     if not args.bed:
         return
-    bedtools = args.bedtools or os.environ.get("BEDTOOLS") or shutil.which("bedtools")
+    bedtools = find_tool("bedtools", args.bedtools)
     if not bedtools:
         sys.exit("bedtools not found; pass --bedtools PATH to run the intersect")
 

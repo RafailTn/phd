@@ -53,6 +53,8 @@ import subprocess
 import sys
 import tempfile
 
+from paths import find_input, find_tool, out_path, require
+
 COMP = str.maketrans("ACGTN", "TGCAN")
 
 
@@ -170,9 +172,12 @@ def water_best(a_seqs, b_seqs, water, min_cov):
 
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--a", required=True, help="FASTA A (e.g. AluACA_union_nr.fasta)")
-    p.add_argument("--b", required=True, help="FASTA B (e.g. snoRNA.txt.fa)")
-    p.add_argument("--out", help="write the per-pair report here (TSV)")
+    p.add_argument("--a", default=find_input("AluACA_union_nr.fasta"),
+                   help="FASTA A [AluACA_union_nr.fasta]")
+    p.add_argument("--b", default=find_input("snoRNA.txt.fa"),
+                   help="FASTA B [snoRNA.txt.fa]")
+    p.add_argument("--out", default=out_path("AluACA_snoRNA_overlap.tsv"),
+                   help="write the per-pair report here (TSV)")
     p.add_argument("--align", action="store_true",
                    help="also run Smith-Waterman (needs EMBOSS water)")
     p.add_argument("--water", default=None, help="path to EMBOSS water")
@@ -183,6 +188,8 @@ def main():
                    help="minimum alignment coverage of the shorter sequence "
                         "for an SW hit to count [0.8]")
     args = p.parse_args()
+
+    require([("FASTA A (--a)", args.a), ("FASTA B (--b)", args.b)])
 
     A, B = read_fasta(args.a), read_fasta(args.b)
     print("inputs")
@@ -230,7 +237,7 @@ def main():
 
     aligned = {}
     if args.align:
-        water = args.water or shutil.which("water")
+        water = find_tool("water", args.water)
         if not water:
             print("\n--align requested but EMBOSS `water` was not found. "
                   "Install it (pixi add emboss) or pass --water PATH.",

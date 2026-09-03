@@ -35,8 +35,11 @@ TSV recording which rule fired for each of the fifteen.
 """
 
 import argparse
+import os
 import re
 import sys
+
+from paths import find_input, out_path, proj, require, search_dirs
 
 
 def read_fasta(path):
@@ -83,16 +86,25 @@ def decide(sno_seq, uni_seq, tol):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--sno", default="snoRNA.txt.fa", help="snoRNA catalogue FASTA")
-    ap.add_argument("--union", default="AluACA_union_nr.fasta", help="AluACA union FASTA")
-    ap.add_argument("--out", default="AluACA_snoRNA_merged_nr.fasta", help="merged FASTA")
-    ap.add_argument("--report", default="AluACA_snoRNA_collapse_report.tsv",
+    ap.add_argument("--sno", default=find_input("snoRNA.txt.fa"),
+                    help="snoRNA catalogue FASTA")
+    ap.add_argument("--union", default=find_input("AluACA_union_nr.fasta"),
+                    help="AluACA union FASTA")
+    ap.add_argument("--out", default=out_path("AluACA_snoRNA_merged_nr.fasta"),
+                    help="merged FASTA")
+    ap.add_argument("--report", default=out_path("AluACA_snoRNA_collapse_report.tsv"),
                     help="per-pair decision table")
-    ap.add_argument("--bed", help="union BED, to correct intervals whose sequence changed")
-    ap.add_argument("--bed-out", help="corrected BED (requires --bed)")
+    ap.add_argument("--bed", default=find_input("AluACA_union_nr.bed"),
+                    help="union BED, to correct intervals whose sequence changed; "
+                         "skipped if absent")
+    ap.add_argument("--bed-out", default=out_path("AluACA_union_nr.collapsed.bed"),
+                    help="corrected BED")
     ap.add_argument("--offset-tol", type=int, default=1,
                     help="5' difference at or below this is a coordinate off-by-one [1]")
     args = ap.parse_args()
+
+    require([("snoRNA catalogue (--sno)", args.sno),
+             ("AluACA union FASTA (--union)", args.union)])
 
     sno = read_fasta(args.sno)
     union = read_fasta(args.union)
@@ -140,9 +152,9 @@ def main():
         for r in rows:
             fh.write("\t".join(str(x) for x in r) + "\n")
 
-    if args.bed:
-        if not args.bed_out:
-            sys.exit("--bed requires --bed-out")
+    if not os.path.exists(args.bed):
+        print(f"no union BED at {args.bed}; skipping coordinate correction")
+    else:
         # Union FASTA headers are the BED name with "|" -> "_" and a ".idN"
         # suffix appended (step 08), so map back before matching.
         by_bed = {}
