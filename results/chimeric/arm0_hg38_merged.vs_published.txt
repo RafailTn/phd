@@ -1,0 +1,16 @@
+# arm0: hg38 + merged AluACA+snoRNA (sparse) vs published hg19
+
+published hg19 chimeras              45,810
+this arm                             39,061
+shared read names                    25,005   (54.6% of published, 64.0% of this arm)
+published only                       20,805
+this arm only                        14,056
+
+where the 20,805 published-only reads were lost:
+  survived repeat+genome masking       kept  20,187   lost     618
+  guide hit, target arm extracted      kept  18,541   lost   1,646
+  survived back-map filter             kept  17,748   lost     793
+  -> lost at the genome-mapping step         17,748   (85.3% of the loss)
+
+published-only target-arm length   n= 20,805  median   50 nt   <=25 nt 15.9%
+shared target-arm length           n= 25,005  median   39 nt   <=25 nt 33.7%

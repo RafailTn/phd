@@ -14,6 +14,7 @@ method rationale live in src/chimeric/README.md; this file is results only.
 import argparse
 import os
 import re
+import shutil
 import subprocess
 import sys
 
@@ -163,6 +164,10 @@ def alu_orientation(ip, ctrl, gtag, rmsk, bedtools, workdir, N1, N2):
     """
     if not (rmsk and os.path.exists(rmsk)):
         return None
+    # Without this the intersect below fails into an empty stdout, every count comes
+    # back 0, and the section is silently wrong rather than absent.
+    if shutil.which(bedtools) is None:
+        sys.exit(f'{bedtools} not found on PATH; needed for the orientation section')
     os.makedirs(workdir, exist_ok=True)
     alu = os.path.join(workdir, 'alu_elements.bed')
     if not os.path.exists(alu):
@@ -184,8 +189,10 @@ def alu_orientation(ip, ctrl, gtag, rmsk, bedtools, workdir, N1, N2):
         cls = g['guide_class']
         for orient, flag in (('sense', '-s'), ('antisense', '-S')):
             q = subprocess.run(
-                f'{bedtools} intersect -a {bed} -b {alu} -u {flag} -f 0.5 2>/dev/null | cut -f4',
-                shell=True, capture_output=True, text=True)
+                f'set -o pipefail; {bedtools} intersect -a {bed} -b {alu} -u {flag} -f 0.5 | cut -f4',
+                shell=True, capture_output=True, text=True, executable='/bin/bash')
+            if q.returncode:
+                sys.exit(f'bedtools intersect failed for {tag}/{orient}: {q.stderr.strip()}')
             idx = [int(x) for x in q.stdout.split()]
             hit = cls.iloc[idx] if idx else pd.Series(dtype=object)
             for c in ('AluACA', 'snoRNA'):

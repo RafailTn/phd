@@ -19,6 +19,45 @@ python3 src/chimeric/make_report.py            # writes results/chimeric/RESULTS
 `make_report.py` recomputes every number in `RESULTS.md` from the annotated tables, so
 rerun it after any change rather than editing the report by hand.
 
+`build_indices.sh` and `run_chimeras.sh` are configured by environment variable, so the
+same two scripts drive every arm of the reproduction matrix below:
+
+| variable | default | meaning |
+|---|---|---|
+| `SPECIES` | `hg38` | genome tag; also the suffix of the pipeline's genomic outputs |
+| `GENOME_INDEX` | `ref/chimeric/${SPECIES}_star_index` | STAR index to use |
+| `SOURCE_FASTA` | `data/AluACA_snoRNA_merged_nr.fasta` | the guide catalogue |
+| `SPARSE_D` | `2` | `build_indices.sh` only; `1` builds a dense index |
+
+## Reproducing the published run
+
+The published output for this sample (`data/DKC1_IP.snoRNA.hg19.chimeras.csv`) holds
+45,810 genomic chimeras against our 39,061 on hg38, and only 25,005 read names are
+shared. Three things differ at once, so they are separated with a 2x2:
+
+|          | plain `snoRNA.txt.fa` (1,951) | merged AluACA+snoRNA (2,701) |
+|----------|-------------------------------|------------------------------|
+| **hg38** | arm2 — catalogue effect       | arm0 — the headline run      |
+| **hg19** | arm1 — the reproduction       | arm3 — build stability       |
+
+`compare_to_published.py` scores an arm against the publication by read name (names carry
+the Illumina identifier and UMI, so they are genome-independent) and traces every
+published chimera the arm missed through that arm's own kept intermediates to say which
+stage dropped it:
+
+```bash
+python3 src/chimeric/compare_to_published.py --outdir results/chimeric/SRR30692552 \
+    --uid SRR30692552 --gtag hg38 --published data/DKC1_IP.snoRNA.hg19.chimeras.csv
+```
+
+For arm0 that puts **85.3 %** of the 20,805 missing reads at the genome-mapping step —
+they survive masking, get a guide hit, and pass the back-map filter, then fail to yield a
+chimera. Masking and catalogue competition account for the other 15 %. That is why the
+build matters enough to test.
+
+The hg19 arms need a dense STAR index, which does not fit in this machine's 31 GB; see
+[`server/README.md`](server/README.md) for the bundle that runs them elsewhere.
+
 ## Which SRA run to use
 
 `data/` holds four runs. Only two are chimeric eCLIP:
@@ -163,7 +202,50 @@ Two things follow for how the results should be read:
 The chr1-only design inflates these numbers -- a read whose true locus is on another
 chromosome is forced onto a chr1 paralog -- so treat them as an upper bound rather than an
 estimate of the effect on the real hg38 run. Rebuilding dense on a >32 GB machine would
-remove the caveat entirely.
+remove the caveat entirely; that is `arm0d` in
+[`server/README.md`](server/README.md), which measures the same thing on real chimera
+calls genome-wide and supersedes this test once it lands.
+
+<details><summary>Redoing the A/B, if it is ever needed</summary>
+
+`work/chimeric/sparsetest/` held the indices, the query and the two alignments. It was
+deleted: the indices and `chr1.fa` are regenerable, and the query was a byte-for-byte copy
+of a file the run directory still holds. The whole thing rebuilds in about five minutes.
+
+The query is the 156,616 target arms that reached the genome-mapping step -- i.e. what
+survived the back-map filter and did not hit rRNA, snRNA or tRNA. **It only exists inside
+a completed run**, so this cannot be redone if `results/chimeric/SRR30692552/` is cleared.
+
+```bash
+cd /home/rafail/Downloads/phd
+export PATH=$PWD/deps/.pixi/envs/default/bin:$PATH
+S=work/chimeric/sparsetest; mkdir -p $S
+
+cp results/chimeric/SRR30692552/SRR30692552.snoRNA.RNA.unmap.fasta $S/query.fasta
+samtools faidx /home/rafail/Downloads/hg38/GRCh38.primary_assembly.genome.fa chr1 > $S/chr1.fa
+
+for D in 1 2; do
+  mkdir -p $S/idx_D$D $S/aln_D$D
+  STAR --runMode genomeGenerate --runThreadN 20 --genomeDir $S/idx_D$D \
+       --genomeFastaFiles $S/chr1.fa --genomeSAindexNbases 13 \
+       --genomeSAsparseD $D --outFileNamePrefix $S/idx_D$D/
+  # These are the pipeline's own genome-step settings, which is what makes the
+  # comparison meaningful -- in particular --outFilterMultimapNmax 1, the filter
+  # the sparsity interacts with.
+  STAR --alignEndsType EndToEnd --genomeDir $S/idx_D$D --genomeLoad NoSharedMemory \
+       --outFileNamePrefix $S/aln_D$D/ \
+       --outFilterMatchNminOverLread 0.66 --outFilterMultimapNmax 1 \
+       --outFilterMultimapScoreRange 1 --outFilterScoreMin 10 \
+       --outFilterScoreMinOverLread 0.66 --outFilterType BySJout \
+       --outReadsUnmapped Fastx --outSAMattributes Standard --outSAMmode Full \
+       --outSAMtype SAM --outSAMunmapped None --outStd Log \
+       --readFilesIn $S/query.fasta --runMode alignReads --runThreadN 20
+done
+```
+
+Then compare the two `Aligned.out.sam`, ignoring secondary alignments (flag `0x100`), on
+`(reference, position, CIGAR)` per read name.
+</details>
 
 The repeat index is built from RepBase human consensus only. The original run used the
 lab's `homo_sapiens_repbase_v2`, which is not public and probably also carried rRNA and a

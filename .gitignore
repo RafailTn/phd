@@ -10,3 +10,4 @@ results/*
 !results/chimeric/
 results/chimeric/*
 !results/chimeric/RESULTS.md
+!results/chimeric/*.vs_published.txt
