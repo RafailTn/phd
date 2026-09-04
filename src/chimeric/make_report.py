@@ -66,6 +66,17 @@ def load(path):
     return df
 
 
+def _esc(v):
+    """Escape markdown table syntax in a cell.
+
+    Guide and gene names legitimately contain "|" -- bowtie2 -a joins equal-scoring
+    references with it, and a genomic arm overlapping two genes is reported as
+    "RCC1|SNHG3". Unescaped, those split the row into extra columns and shift every
+    value right, which shows up as an AluACA id sitting in a count column.
+    """
+    return str(v).replace('|', r'\|')
+
+
 def _fmt_col(series):
     """Format one column, respecting its dtype.
 
@@ -77,7 +88,7 @@ def _fmt_col(series):
         return series.map(lambda v: f'{v:,}')
     if pd.api.types.is_float_dtype(series):
         return series.map(lambda v: '' if pd.isna(v) else f'{v:,.2f}'.rstrip('0').rstrip('.'))
-    return series.map(lambda v: '' if pd.isna(v) else str(v))
+    return series.map(lambda v: '' if pd.isna(v) else _esc(v))
 
 
 def md_table(df, index_name=''):
@@ -89,7 +100,7 @@ def md_table(df, index_name=''):
     lines = ['| ' + ' | '.join(head) + ' |',
              '|' + '|'.join(['---'] * len(head)) + '|']
     for idx in body.index:
-        lines.append('| ' + ' | '.join([str(idx)] + list(body.loc[idx])) + ' |')
+        lines.append('| ' + ' | '.join([_esc(idx)] + list(body.loc[idx])) + ' |')
     return '\n'.join(lines)
 
 

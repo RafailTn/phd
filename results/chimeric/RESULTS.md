@@ -90,14 +90,14 @@ Top 25 by IP chimera count:
 | hsa-novel-ACA-491.id3583 | 77 | 19 | 6.53 | 12.56 | 0.56 |  |
 | AluACA280_hsa-novel-ACA-662.id3422 | 77 | 14 | 6.53 | 9.25 | 0.73 |  |
 | hsa-novel-ACA-713.id3155 | 74 | 8 | 6.27 | 5.29 | 1.16 |  |
-| hsa-novel-ACA-368.id3702|hsa-novel-ACA-390.id3601 | 68 | 5 | 5.76 | 3.3 | 1.57 |  |
+| hsa-novel-ACA-368.id3702\|hsa-novel-ACA-390.id3601 | 68 | 5 | 5.76 | 3.3 | 1.57 |  |
 | hsa-novel-ACA-503.id3323 | 65 | 11 | 5.51 | 7.27 | 0.79 |  |
 | hsa-novel-ACA-259.id3667 | 62 | 12 | 5.26 | 7.93 | 0.7 |  |
-| hsa-novel-ACA-486.id3629|hsa-novel-ACA-616.id3504 | 60 | 16 | 5.09 | 10.58 | 0.53 |  |
+| hsa-novel-ACA-486.id3629\|hsa-novel-ACA-616.id3504 | 60 | 16 | 5.09 | 10.58 | 0.53 |  |
 | hsa-novel-ACA-574.id3453 | 50 | 7 | 4.24 | 4.63 | 0.93 |  |
 | hsa-novel-ACA-341.id3501 | 50 | 7 | 4.24 | 4.63 | 0.93 |  |
 | hsa-novel-ACA-258.id3530 | 47 | 4 | 3.98 | 2.64 | 1.37 |  |
-| hsa-novel-ACA-390.id3601|hsa-novel-ACA-503.id3323 | 45 | 4 | 3.81 | 2.64 | 1.32 |  |
+| hsa-novel-ACA-390.id3601\|hsa-novel-ACA-503.id3323 | 45 | 4 | 3.81 | 2.64 | 1.32 |  |
 | hsa-novel-ACA-747.id3390 | 44 | 1 | 3.73 | 0.66 | 2.85 | yes |
 
 ## What the AluACA guides pair with
@@ -116,15 +116,15 @@ Top 25 by IP chimera count:
 | protein_coding | 8,294 |
 | intergenic | 2,581 |
 | lncRNA | 1,451 |
-| lncRNA|protein_coding | 410 |
+| lncRNA\|protein_coding | 410 |
 | Mt_rRNA | 69 |
-| lncRNA|transcribed_unprocessed_pseudogene | 36 |
-| Mt_rRNA|Mt_tRNA | 23 |
-| TEC|protein_coding | 18 |
+| lncRNA\|transcribed_unprocessed_pseudogene | 36 |
+| Mt_rRNA\|Mt_tRNA | 23 |
+| TEC\|protein_coding | 18 |
 | Mt_tRNA | 17 |
 | snRNA | 14 |
 | processed_pseudogene | 13 |
-| Mt_tRNA|protein_coding | 13 |
+| Mt_tRNA\|protein_coding | 13 |
 
 ## AluACA-mRNA chimeras
 
@@ -141,7 +141,7 @@ Top exonic mRNA targets (IP):
 
 | gene | exonic chimeras |
 |---|---|
-| RCC1|SNHG3 | 80 |
+| RCC1\|SNHG3 | 80 |
 | MT-CO3 | 26 |
 | EEF2 | 18 |
 | TAF1D | 16 |
@@ -151,18 +151,18 @@ Top exonic mRNA targets (IP):
 | RPS24 | 10 |
 | PRAME | 10 |
 | TUBB | 10 |
-| MT-ATP6|MT-CO3 | 9 |
+| MT-ATP6\|MT-CO3 | 9 |
 | RPL12 | 9 |
 | RANBP1 | 9 |
 | KDM4B | 8 |
 | GAK | 8 |
 | RPL31 | 8 |
-| ENSG00000268400|STXBP2 | 8 |
+| ENSG00000268400\|STXBP2 | 8 |
 | HSP90AA1 | 7 |
 | RPS3 | 7 |
 | RPS9 | 7 |
 | MLXIP | 7 |
-| ENSG00000260417|GSE1 | 6 |
+| ENSG00000260417\|GSE1 | 6 |
 | SRM | 6 |
 | YWHAB | 6 |
 | PABPC1 | 6 |
@@ -174,15 +174,15 @@ Top AluACA-mRNA pairs (IP, exonic and intronic):
 | hsa-novel-ACA-514.id3382 -> AKAP13 | 139 |
 | hsa-novel-ACA-616.id3504 -> GSE1 | 71 |
 | hsa-novel-ACA-652.id3749 -> GSE1 | 59 |
-| hsa-novel-ACA-616.id3504 -> RCC1|SNHG3 | 33 |
+| hsa-novel-ACA-616.id3504 -> RCC1\|SNHG3 | 33 |
 | hsa-novel-ACA-786.id3589 -> GSE1 | 31 |
-| hsa-novel-ACA-652.id3749 -> RCC1|SNHG3 | 23 |
+| hsa-novel-ACA-652.id3749 -> RCC1\|SNHG3 | 23 |
 | hsa-novel-ACA-368.id3702 -> MT-CO3 | 18 |
 | hsa-novel-ACA-616.id3504 -> CBFA2T3 | 17 |
 | hsa-novel-ACA-616.id3504 -> WDR4 | 16 |
 | hsa-novel-ACA-847.id3429 -> GSE1 | 15 |
 | hsa-novel-ACA-368.id3702 -> GSE1 | 15 |
-| hsa-novel-ACA-385.id3436 -> RCC1|SNHG3 | 15 |
+| hsa-novel-ACA-385.id3436 -> RCC1\|SNHG3 | 15 |
 | hsa-novel-ACA-368.id3702 -> EEF2 | 15 |
 | hsa-novel-ACA-815.id3217 -> GSE1 | 14 |
 | hsa-novel-ACA-815.id3217 -> CBFA2T3 | 11 |
@@ -209,7 +209,7 @@ Conservative AluACA-mRNA set, top genes:
 
 | gene | chimeras |
 |---|---|
-| RCC1|SNHG3 | 43 |
+| RCC1\|SNHG3 | 43 |
 | MT-CO3 | 26 |
 | EEF2 | 18 |
 | ELOF1 | 16 |
@@ -217,12 +217,12 @@ Conservative AluACA-mRNA set, top genes:
 | MT-ATP6 | 12 |
 | RPS24 | 10 |
 | PRAME | 10 |
-| MT-ATP6|MT-CO3 | 9 |
+| MT-ATP6\|MT-CO3 | 9 |
 | RPL12 | 9 |
 | TAF1D | 9 |
 | RANBP1 | 9 |
 | KDM4B | 8 |
-| ENSG00000268400|STXBP2 | 8 |
+| ENSG00000268400\|STXBP2 | 8 |
 | RPL31 | 8 |
 | RPS9 | 7 |
 | RPS3 | 7 |
