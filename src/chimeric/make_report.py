@@ -438,6 +438,49 @@ window this pipeline leaves onto cis, and testing the co-transcriptional model p
 would need that stage relaxed or replaced.
 """)
 
+    # ---- chrM as an internal artefact control -------------------------------
+    # chrM is deliberately kept in the reference. Dyskerin is nuclear and AluACAs are
+    # nucleoplasmic H/ACA RNPs, so an AluACA:MT-CO3 duplex is not physically available and
+    # every chrM chimera must be ligation artefact -- which makes it a free, in-sample
+    # measurement of the artefact floor. Removing chrM would not remove those reads: the
+    # genome step runs --outFilterMultimapNmax 1, so survivors are unique to chrM, and
+    # without it they would fall through to one of hg38's NUMT copies (95-99% identical)
+    # and be reported as nuclear targets. That trades a labelled artefact for a hidden one.
+    o.append('## chrM as an internal artefact control\n')
+    def mstrat(d, cls, mito):
+        x = d[(d.guide_class == cls) & (d.target_class == a.gtag) & (~d.target_in_repeat)
+              & (d.feature == 'exonic') & _pc(d)]
+        m = x.reference_target.astype(str).isin(['chrM', 'MT', 'chrMT'])
+        return x[m] if mito else x[~m]
+    mrows = {}
+    for cls in ('AluACA', 'snoRNA'):
+        for mito, lbl in ((True, 'chrM (impossible, = artefact)'), (False, 'nuclear')):
+            A_, B_ = mstrat(ip, cls, mito), mstrat(ctrl, cls, mito)
+            pt, lo, hi = rate_ratio(len(A_), len(B_), N1, N2)
+            hs = 'inf' if hi == float('inf') else f'{hi:.2f}'
+            mrows[f'{cls} -> {lbl}'] = [len(A_), len(B_), round(pt, 2), f'{lo:.2f} - {hs}']
+    o.append(md_table(pd.DataFrame.from_dict(
+        mrows, orient='index', columns=['IP', 'input', 'rate ratio', '95% CI']), 'stratum'))
+    o.append("""
+**This is the most important caveat in the report.** For AluACA guides the artefact floor
+is 1.17x with an interval reaching 2.77, and that interval contains the 1.51x measured on
+nuclear exonic mRNA targets. The enrichment over *input* is solid; the enrichment over
+*artefact* is not demonstrated. A chimera class that cannot exist scores about as well as
+the candidate signal, so the AluACA-mRNA result should be stated as consistent with a
+guide model, not as evidence for one.
+
+The snoRNA rows show why an artefact floor is not simply 1.0. Chimeras form during on-bead
+ligation, so a spurious pairing inherits the enrichment of whichever guide it is attached
+to: snoRNA guides are strongly pulled down, so even their impossible pairings score high
+(42.71x, though on zero input reads, so barely determined), while AluACA guides are not,
+and theirs score 1.17x. Read that way chrM measures guide-level enrichment with target
+specificity removed -- which is the quantity that makes the AluACA signal look marginal.
+
+Whether the guide can actually form the >=8 bp bipartite duplex around a target uridine
+would separate the two, and no read-counting statistic can. That is the experiment this
+result needs next.
+""")
+
     # ---- the actual target list --------------------------------------------
     # Restricted to the one stratum that is enriched over input, so this is a candidate
     # list rather than a ranking of whatever is most abundant. Counts per guide-gene pair

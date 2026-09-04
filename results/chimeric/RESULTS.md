@@ -274,6 +274,33 @@ calling. The 450 novel-junction reads quantified in the masking section are the 
 window this pipeline leaves onto cis, and testing the co-transcriptional model properly
 would need that stage relaxed or replaced.
 
+## chrM as an internal artefact control
+
+| stratum | IP | input | rate ratio | 95% CI |
+|---|---|---|---|---|
+| AluACA -> chrM (impossible, = artefact) | 86 | 9 | 1.17 | 0.62 - 2.77 |
+| AluACA -> nuclear | 2,341 | 199 | 1.51 | 1.31 - 1.75 |
+| snoRNA -> chrM (impossible, = artefact) | 166 | 0 | 42.71 | 5.71 - inf |
+| snoRNA -> nuclear | 5,668 | 52 | 13.85 | 10.65 - 18.74 |
+
+**This is the most important caveat in the report.** For AluACA guides the artefact floor
+is 1.17x with an interval reaching 2.77, and that interval contains the 1.51x measured on
+nuclear exonic mRNA targets. The enrichment over *input* is solid; the enrichment over
+*artefact* is not demonstrated. A chimera class that cannot exist scores about as well as
+the candidate signal, so the AluACA-mRNA result should be stated as consistent with a
+guide model, not as evidence for one.
+
+The snoRNA rows show why an artefact floor is not simply 1.0. Chimeras form during on-bead
+ligation, so a spurious pairing inherits the enrichment of whichever guide it is attached
+to: snoRNA guides are strongly pulled down, so even their impossible pairings score high
+(42.71x, though on zero input reads, so barely determined), while AluACA guides are not,
+and theirs score 1.17x. Read that way chrM measures guide-level enrichment with target
+specificity removed -- which is the quantity that makes the AluACA signal look marginal.
+
+Whether the guide can actually form the >=8 bp bipartite duplex around a target uridine
+would separate the two, and no read-counting statistic can. That is the experiment this
+result needs next.
+
 ## AluACA-mRNA target list
 
 Every target below is drawn from the enriched stratum only -- exonic, protein-coding, outside any annotated repeat (2,427 IP chimeras, 1.49x over input). Ranking the unstratified set instead would just rank abundance.
