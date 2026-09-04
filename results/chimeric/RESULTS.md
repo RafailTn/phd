@@ -274,6 +274,36 @@ calling. The 450 novel-junction reads quantified in the masking section are the 
 window this pipeline leaves onto cis, and testing the co-transcriptional model properly
 would need that stage relaxed or replaced.
 
+## Alu targets, split by orientation
+
+For an Alu-derived guide an antisense Alu is arguably the most available complementary partner in the transcriptome -- the same logic that underlies IRAlu duplexes and STAU1-mediated decay. A same-orientation Alu shares the guide's sequence and cannot base-pair, so orientation separates a genuine Alu:Alu duplex from plain sequence self-similarity, which the repeat flag alone cannot.
+
+| stratum | IP | input | rate ratio | 95% CI |
+|---|---|---|---|---|
+| AluACA -> sense Alu (cannot base-pair) | 850 | 218 | 0.5 | 0.43 - 0.58 |
+| AluACA -> antisense Alu (can base-pair) | 997 | 382 | 0.33 | 0.30 - 0.38 |
+| snoRNA -> sense Alu (cannot base-pair) | 122 | 3 | 4.49 | 1.74 - 25.64 |
+| snoRNA -> antisense Alu (can base-pair) | 463 | 89 | 0.66 | 0.53 - 0.85 |
+
+**The pairable class is present in quantity and is not enriched.** 997 AluACA chimeras
+target an antisense Alu -- one that could actually form a duplex -- and they run at
+0.33x, *more* depleted than
+the same-orientation Alus that cannot pair at all. A duplex model predicts the opposite
+ordering.
+
+The orientation composition says the same thing. Antisense:sense is 1.17 for AluACA
+guides against 3.80 for snoRNA guides (Fisher p = 6.4e-29). snoRNA guides have no Alu
+complementarity, so their ratio is the baseline availability of antisense Alus among
+transcribed sequences; AluACA guides sit *below* that baseline rather than above it.
+
+So within AluACA guides the enrichment sits in non-repeat exonic mRNA
+(1.49x), not in Alu targets of either orientation. Two limits
+on that reading: the AluACA class is depleted overall, so every stratum inside it starts
+below 1 and the informative comparison is between strata rather than against 1; and this
+says nothing about *cis* IRAlu pairing within a single transcript, which genome masking
+removes irrespective of orientation.
+
+
 ## chrM as an internal artefact control
 
 | stratum | IP | input | rate ratio | 95% CI |

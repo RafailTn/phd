@@ -14,10 +14,11 @@ method rationale live in src/chimeric/README.md; this file is results only.
 import argparse
 import os
 import re
+import subprocess
 import sys
 
 import pandas as pd
-from scipy.stats import beta
+from scipy.stats import beta, fisher_exact
 
 # Enrichment is reported as a rate ratio (IP rate / input rate) with an exact 95%
 # confidence interval, and a guide only counts as enriched if the *lower* bound clears
@@ -146,12 +147,61 @@ def crosstab(df, label):
     return f'**{label}**\n\n' + md_table(ct, 'guide class')
 
 
+def alu_orientation(ip, ctrl, gtag, rmsk, bedtools, workdir, N1, N2):
+    """Split Alu-overlapping targets by orientation relative to the Alu element.
+
+    Alu elements insert in both orientations, so a sense Alu and an antisense Alu are
+    reverse complements. An Alu-derived guide can only base-pair with an *antisense*
+    copy; a same-orientation Alu shares its sequence and cannot form a duplex. That
+    distinction separates a genuine Alu:Alu interaction from sequence self-similarity,
+    which the plain "target overlaps a repeat" flag cannot do.
+
+    Note the pipeline's back-mapping step runs bowtie2 --norc, so it only removes target
+    arms matching the source in the forward orientation. Sense Alu targets are therefore
+    filtered upstream and antisense ones are not -- the pairable class survives to be
+    counted here, which is what makes this test possible at all.
+    """
+    if not (rmsk and os.path.exists(rmsk)):
+        return None
+    os.makedirs(workdir, exist_ok=True)
+    alu = os.path.join(workdir, 'alu_elements.bed')
+    if not os.path.exists(alu):
+        subprocess.run(f"awk -F'\t' '$4 ~ /^Alu/' {rmsk} | LC_ALL=C sort -k1,1 -k2,2n > {alu}",
+                       shell=True, check=True)
+
+    out = {}
+    for tag, df in (('ip', ip), ('ctrl', ctrl)):
+        g = df[(df.target_class == gtag) & df.guide_class.isin(['AluACA', 'snoRNA'])]
+        g = g.reset_index(drop=True)
+        bed = os.path.join(workdir, f'{tag}.arms.bed')
+        with open(bed, 'w') as o:
+            for i, r in enumerate(g.itertuples()):
+                st = int(r.map_to_target_ref_start) - 1
+                en = int(r.map_to_target_ref_stop)
+                if en > st:
+                    o.write(f'{r.reference_target}\t{st}\t{en}\t{i}\t0\t{r.map_to_target_strand}\n')
+        subprocess.run(f'LC_ALL=C sort -k1,1 -k2,2n {bed} -o {bed}', shell=True, check=True)
+        cls = g['guide_class']
+        for orient, flag in (('sense', '-s'), ('antisense', '-S')):
+            q = subprocess.run(
+                f'{bedtools} intersect -a {bed} -b {alu} -u {flag} -f 0.5 2>/dev/null | cut -f4',
+                shell=True, capture_output=True, text=True)
+            idx = [int(x) for x in q.stdout.split()]
+            hit = cls.iloc[idx] if idx else pd.Series(dtype=object)
+            for c in ('AluACA', 'snoRNA'):
+                out[(c, orient, tag)] = int((hit == c).sum())
+    return out
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--ip', default='SRR30692552')
     p.add_argument('--input', dest='inp', default='SRR30692553')
     p.add_argument('--resdir', default='results/chimeric')
     p.add_argument('--published', default='data/DKC1_IP.snoRNA.hg19.chimeras.csv')
+    p.add_argument('--rmsk', default='ref/chimeric/rmsk.hg38.bed',
+                   help='RepeatMasker BED, for the Alu orientation analysis.')
+    p.add_argument('--bedtools', default='bedtools')
     p.add_argument('--gtag', default='hg38',
                    help='Genome target tag, as used by annotate_chimeras.py.')
     p.add_argument('--out', default='results/chimeric/RESULTS.md')
@@ -437,6 +487,57 @@ calling. The 450 novel-junction reads quantified in the masking section are the 
 window this pipeline leaves onto cis, and testing the co-transcriptional model properly
 would need that stage relaxed or replaced.
 """)
+
+    # ---- Alu target orientation ---------------------------------------------
+    ori = alu_orientation(ip, ctrl, a.gtag, a.rmsk, a.bedtools,
+                          os.path.join(a.resdir, 'orient_work'), N1, N2)
+    if ori:
+        o.append('## Alu targets, split by orientation\n')
+        o.append(
+            'For an Alu-derived guide an antisense Alu is arguably the most available '
+            'complementary partner in the transcriptome -- the same logic that underlies '
+            'IRAlu duplexes and STAU1-mediated decay. A same-orientation Alu shares the '
+            "guide's sequence and cannot base-pair, so orientation separates a genuine "
+            'Alu:Alu duplex from plain sequence self-similarity, which the repeat flag '
+            'alone cannot.\n')
+        rows = {}
+        for cls in ('AluACA', 'snoRNA'):
+            for orient, note in (('sense', 'cannot base-pair'),
+                                 ('antisense', 'can base-pair')):
+                x, y = ori[(cls, orient, 'ip')], ori[(cls, orient, 'ctrl')]
+                pt, lo, hi = rate_ratio(x, y, N1, N2)
+                hs = 'inf' if hi == float('inf') else f'{hi:.2f}'
+                rows[f'{cls} -> {orient} Alu ({note})'] = [x, y, round(pt, 2), f'{lo:.2f} - {hs}']
+        o.append(md_table(pd.DataFrame.from_dict(
+            rows, orient='index', columns=['IP', 'input', 'rate ratio', '95% CI']), 'stratum'))
+        aa, as_ = ori[('AluACA', 'antisense', 'ip')], ori[('AluACA', 'sense', 'ip')]
+        sa, ss = ori[('snoRNA', 'antisense', 'ip')], ori[('snoRNA', 'sense', 'ip')]
+        od, pv = fisher_exact([[aa, as_], [sa, ss]])
+        # the enriched stratum's ratio, computed rather than restated
+        def _ex(d):
+            return d[(d.guide_class == 'AluACA') & (d.target_class == a.gtag) &
+                     (~d.target_in_repeat) & _pc(d) & (d.feature == 'exonic')]
+        ex_r = rate_ratio(len(_ex(ip)), len(_ex(ctrl)), N1, N2)[0]
+        o.append(f"""
+**The pairable class is present in quantity and is not enriched.** {aa:,} AluACA chimeras
+target an antisense Alu -- one that could actually form a duplex -- and they run at
+{rate_ratio(aa, ori[('AluACA','antisense','ctrl')], N1, N2)[0]:.2f}x, *more* depleted than
+the same-orientation Alus that cannot pair at all. A duplex model predicts the opposite
+ordering.
+
+The orientation composition says the same thing. Antisense:sense is {aa/as_:.2f} for AluACA
+guides against {sa/ss:.2f} for snoRNA guides (Fisher p = {pv:.1e}). snoRNA guides have no Alu
+complementarity, so their ratio is the baseline availability of antisense Alus among
+transcribed sequences; AluACA guides sit *below* that baseline rather than above it.
+
+So within AluACA guides the enrichment sits in non-repeat exonic mRNA
+({ex_r:.2f}x), not in Alu targets of either orientation. Two limits
+on that reading: the AluACA class is depleted overall, so every stratum inside it starts
+below 1 and the informative comparison is between strata rather than against 1; and this
+says nothing about *cis* IRAlu pairing within a single transcript, which genome masking
+removes irrespective of orientation.
+""")
+        o.append('')
 
     # ---- chrM as an internal artefact control -------------------------------
     # chrM is deliberately kept in the reference. Dyskerin is nuclear and AluACAs are

@@ -12,7 +12,12 @@ bash src/chimeric/run_chimeras.sh SRR30692553      # the input control
 python3 src/chimeric/annotate_chimeras.py --outdir results/chimeric/SRR30692552 \
     --uid SRR30692552 --out results/chimeric/SRR30692552.annotated.tsv \
     --source-bed ref/chimeric/guide_loci.hg38.bed --rmsk ref/chimeric/rmsk.hg38.bed
+# ... and the same for SRR30692553, then:
+python3 src/chimeric/make_report.py            # writes results/chimeric/RESULTS.md
 ```
+
+`make_report.py` recomputes every number in `RESULTS.md` from the annotated tables, so
+rerun it after any change rather than editing the report by hand.
 
 ## Which SRA run to use
 
