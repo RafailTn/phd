@@ -463,22 +463,28 @@ would need that stage relaxed or replaced.
         mrows, orient='index', columns=['IP', 'input', 'rate ratio', '95% CI']), 'stratum'))
     o.append("""
 **This is the most important caveat in the report.** For AluACA guides the artefact floor
-is 1.17x with an interval reaching 2.77, and that interval contains the 1.51x measured on
-nuclear exonic mRNA targets. The enrichment over *input* is solid; the enrichment over
-*artefact* is not demonstrated. A chimera class that cannot exist scores about as well as
-the candidate signal, so the AluACA-mRNA result should be stated as consistent with a
-guide model, not as evidence for one.
+sits at 1.17x with an interval reaching 2.77, and that interval contains the 1.51x measured
+on nuclear exonic mRNA targets. A Fisher exact test on the 2x2 of counts puts the two at
+p = 0.56: **not distinguishable**. The enrichment over *input* is solid; whether it exceeds
+the artefact floor is simply not resolved by this data. The AluACA-mRNA result should
+therefore be stated as consistent with a guide model, not as evidence for one.
 
-The snoRNA rows show why an artefact floor is not simply 1.0. Chimeras form during on-bead
-ligation, so a spurious pairing inherits the enrichment of whichever guide it is attached
-to: snoRNA guides are strongly pulled down, so even their impossible pairings score high
-(42.71x, though on zero input reads, so barely determined), while AluACA guides are not,
-and theirs score 1.17x. Read that way chrM measures guide-level enrichment with target
-specificity removed -- which is the quantity that makes the AluACA signal look marginal.
+What chrM does establish is that the floor is not zero. AluACA guides generate 86
+impossible chimeras in this stratum, against 2,341 candidates -- ligation noise is
+measurably present, not negligible.
 
-Whether the guide can actually form the >=8 bp bipartite duplex around a target uridine
-would separate the two, and no read-counting statistic can. That is the experiment this
-result needs next.
+Both chrM ratios are badly underpowered and should not be over-read. The snoRNA figure of
+42.71x rests on *zero* input reads: its magnitude is produced entirely by the
+Haldane-Anscombe 0.5 substituted for that zero, its interval runs to infinity, and Fisher
+against the nuclear stratum gives p = 0.41 -- also not distinguishable. It is tempting to
+argue from these numbers that an artefact pairing inherits the enrichment of whichever
+guide it is attached to, since chimeras form during on-bead ligation. That story fits the
+point estimates, but the intervals do not support it and it should not be presented as a
+finding.
+
+Whether a guide can actually form the >=8 bp bipartite duplex around a target uridine
+would separate signal from artefact, and no read-counting statistic can. That is the
+experiment this result needs next.
 """)
 
     # ---- the actual target list --------------------------------------------
