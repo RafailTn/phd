@@ -58,11 +58,12 @@ of IP reads survived trimming versus 44%
 of input reads), so absolute per-million rates carry real uncertainty while the
 class-vs-class contrast does not.
 
-Everything below therefore describes a population that is, in aggregate, not enriched by
-the pull-down. No individual AluACA guide clears a 2x bar on the lower end of its
-confidence interval either (see below), so the AluACA-mRNA counts in the later sections
-should be read as candidates awaiting an orthogonal test, not as established
-DKC1-dependent interactions.
+**Do not stop at this table.** The pooled AluACA figure averages two populations that
+behave in opposite directions, and the average takes the sign of the larger one. Chimeras
+whose genomic arm lands in a repeat -- the Alu-to-Alu artefact class -- run at 0.48x and
+dominate the pool, while exonic protein-coding targets outside any repeat run at 1.49x
+and are genuinely enriched. See *Stratified enrichment* below, which is the table this
+question actually turns on.
 
 ## AluACA-guided chimeras
 
@@ -73,6 +74,37 @@ DKC1-dependent interactions.
 No individual AluACA guide is demonstrably enriched. Several have eye-catching point estimates -- a guide with 27 IP chimeras and none at all in the input scores 7.1x -- but with only 1.5 M input reads, an unenriched guide at that rate would be expected to yield roughly 3 input reads, so observing zero is weak evidence and the interval reaches below 1. Ranking on the point estimate alone promotes about a dozen guides on exactly that basis.
 
 The table below is a shortlist ordered by IP count, not a set of significant hits. With one IP and one input library there is no replication to estimate dispersion from, and no multiple-testing correction is applied across 1,856 guides.
+
+### Calibrated against the snoRNA positive control
+
+| guide class | guides with >=20 IP | median rate ratio | share above 2x | share with zero input |
+|---|---|---|---|---|
+| AluACA | 66 | 0.84 | 14% | 6% |
+| snoRNA | 335 | 16.29 | 94% | 81% |
+
+| IP chimeras | AluACA n | AluACA median ratio | snoRNA n | snoRNA median ratio |
+|---|---|---|---|---|
+| 20-49 | 44 | 1.05 | 106 | 7.31 |
+| 50-99 | 12 | 0.71 | 92 | 16.29 |
+| 100-499 | 4 | 0.66 | 129 | 39.12 |
+| 500+ | 6 | 0.57 | 8 | 192.65 |
+
+**Zero input reads is what a real guide looks like here** -- 81% of snoRNA guides with at
+least 20 IP chimeras have none at all. So a wide confidence interval is not evidence
+against a guide, and the interval-based reading above should not be taken as one; applied
+to the positive control it would discard almost all of it.
+
+What separates the two classes is the pattern, not the significance of any one guide.
+Genuine snoRNA guides get *cleaner* as they get more abundant -- median ratio climbs from
+7x to 193x across the count bands -- because real binding makes abundance and enrichment
+reinforce each other. The AluACAs run the other way: the more chimeras a guide has, the
+more depleted it is. That is the signature of a background population, where abundant
+species appear in both libraries and the smaller, less complex input concentrates them.
+
+The AluACA guides that do show >=20 IP chimeras and zero input number 4, against 1.7
+expected by chance across the 66 guides tested -- not a signal. The defensible candidate
+set is the small minority above 2x, which is somewhat more than chance allows but cannot
+be resolved guide-by-guide at this input depth.
 
 Top 25 by IP chimera count:
 
@@ -195,6 +227,158 @@ Top AluACA-mRNA pairs (IP, exonic and intronic):
 | hsa-novel-ACA-664.id3623 -> GSE1 | 10 |
 | hsa-novel-ACA-368.id3702 -> ELOF1 | 10 |
 | hsa-novel-ACA-616.id3504 -> PIEZO1 | 10 |
+
+## Stratified enrichment: separating signal from the Alu background
+
+**AluACA guides**
+
+| stratum | IP | input | rate ratio | 95% CI |
+|---|---|---|---|---|
+| genomic arm, all | 13,042 | 2,581 | 0.65 | 0.62 - 0.68 |
+| arm inside a repeat | 4,947 | 1,325 | 0.48 | 0.45 - 0.51 |
+| arm outside any repeat | 8,095 | 1,256 | 0.83 | 0.78 - 0.88 |
+| outside repeat, protein_coding | 5,915 | 806 | 0.94 | 0.87 - 1.01 |
+| outside repeat, protein_coding, EXONIC | 2,427 | 208 | 1.49 | 1.30 - 1.73 |
+
+**snoRNA guides**
+
+| stratum | IP | input | rate ratio | 95% CI |
+|---|---|---|---|---|
+| genomic arm, all | 25,742 | 480 | 6.87 | 6.28 - 7.54 |
+| arm inside a repeat | 7,952 | 235 | 4.33 | 3.81 - 4.96 |
+| arm outside any repeat | 17,790 | 245 | 9.29 | 8.21 - 10.61 |
+| outside repeat, protein_coding | 10,342 | 171 | 7.73 | 6.67 - 9.08 |
+| outside repeat, protein_coding, EXONIC | 5,834 | 52 | 14.25 | 10.96 - 19.29 |
+
+
+**The aggregate AluACA depletion is the Alu-to-Alu background, and it inverts the sign of
+the real signal.** Chimeras whose genomic arm lands in a repeat run at 0.48x. Strip those
+out and restrict to exonic protein-coding targets -- the stratum a guide model actually
+predicts -- and AluACA chimeras are *enriched* at 1.49x with a confidence interval clear
+of 1, over 2,427 IP chimeras. Reporting only the pooled 0.68x would have buried that.
+
+The same stratification puts snoRNA guides at 14.25x, so AluACA-mRNA pairing is roughly
+tenfold weaker than canonical snoRNA guiding rather than absent. That is the size of
+effect expected if the duplexes are short-lived: Pederiva et al. argue mRNA
+pseudouridylation proceeds "with the aid of guide RNAs containing mismatches toward the
+mRNA to be modified", and a mismatched, catalytically transient duplex is captured by
+proximity ligation far less efficiently than a stable snoRNP-rRNA pairing. A weaker ratio
+is therefore the predicted observation, not evidence against the model.
+
+**This measures trans pairing only.** Of the enriched exonic set, 99.9% pair a guide with
+an mRNA from elsewhere in the genome; just 2 of 2,427 fall within 1 Mb of their own guide
+locus. That is not evidence against cis action, because genome masking removes cis
+geometry by construction -- a guide ligated to its own host pre-mRNA yields a read that
+aligns contiguously, or across a short novel junction, and is dropped before chimera
+calling. The 450 novel-junction reads quantified in the masking section are the only
+window this pipeline leaves onto cis, and testing the co-transcriptional model properly
+would need that stage relaxed or replaced.
+
+## AluACA-mRNA target list
+
+Every target below is drawn from the enriched stratum only -- exonic, protein-coding, outside any annotated repeat (2,427 IP chimeras, 1.49x over input). Ranking the unstratified set instead would just rank abundance.
+
+### By target gene
+
+1,688 in total; full list in `results/chimeric/SRR30692552.AluACA_mRNA_targets_by_gene.tsv`. Top 30 by IP count:
+
+| gene_name | IP | input | rate ratio | CI low | CI high |
+|---|---|---|---|---|---|
+| RCC1\|SNHG3 | 44 | 1 | 3.81 | 0.96 | 227.91 |
+| MT-CO3 | 26 | 0 | 6.8 | 0.84 |  |
+| EEF2 | 18 | 0 | 4.75 | 0.56 |  |
+| ELOF1 | 16 | 0 | 4.23 | 0.49 |  |
+| RPS11 | 14 | 0 | 3.72 | 0.43 |  |
+| MT-ATP6 | 12 | 2 | 0.64 | 0.17 | 7.08 |
+| PRAME | 10 | 0 | 2.69 | 0.29 |  |
+| RPS24 | 10 | 1 | 0.9 | 0.18 | 55.66 |
+| TAF1D | 9 | 0 | 2.44 | 0.25 |  |
+| MT-ATP6\|MT-CO3 | 9 | 2 | 0.49 | 0.12 | 5.49 |
+| RPL12 | 9 | 0 | 2.44 | 0.25 |  |
+| RANBP1 | 9 | 0 | 2.44 | 0.25 |  |
+| RPL31 | 8 | 2 | 0.44 | 0.1 | 4.96 |
+| ENSG00000268400\|STXBP2 | 8 | 0 | 2.18 | 0.22 |  |
+| KDM4B | 8 | 0 | 2.18 | 0.22 |  |
+| RPS9 | 7 | 0 | 1.92 | 0.18 |  |
+| RPS3 | 7 | 0 | 1.92 | 0.18 |  |
+| MLXIP | 6 | 0 | 1.67 | 0.15 |  |
+| AP3S2\|ARPIN-AP3S2\|MIR5094 | 6 | 0 | 1.67 | 0.15 |  |
+| RPL8 | 6 | 0 | 1.67 | 0.15 |  |
+| YWHAB | 6 | 1 | 0.56 | 0.09 | 35.4 |
+| ENSG00000284931\|HBG1 | 6 | 0 | 1.67 | 0.15 |  |
+| RPS23 | 6 | 1 | 0.56 | 0.09 | 35.4 |
+| PABPC1 | 6 | 0 | 1.67 | 0.15 |  |
+| MT-ND4 | 6 | 0 | 1.67 | 0.15 |  |
+| SRM | 6 | 0 | 1.67 | 0.15 |  |
+| HSP90AA1 | 5 | 0 | 1.41 | 0.12 |  |
+| HNRNPA2B1 | 5 | 0 | 1.41 | 0.12 |  |
+| FTL | 5 | 0 | 1.41 | 0.12 |  |
+| MT-ND2 | 5 | 1 | 0.47 | 0.07 | 30.33 |
+
+### By guide-target pair
+
+2,099 in total; full list in `results/chimeric/SRR30692552.AluACA_mRNA_targets_by_pair.tsv`. Top 30 by IP count:
+
+| guide_names / gene_name | IP | input | rate ratio | CI low | CI high |
+|---|---|---|---|---|---|
+| ('hsa-novel-ACA-616.id3504', 'RCC1\|SNHG3') | 24 | 0 | 6.28 | 0.77 |  |
+| ('hsa-novel-ACA-368.id3702', 'MT-CO3') | 18 | 0 | 4.75 | 0.56 |  |
+| ('hsa-novel-ACA-368.id3702', 'EEF2') | 15 | 0 | 3.98 | 0.46 |  |
+| ('hsa-novel-ACA-368.id3702', 'RPS11') | 11 | 0 | 2.95 | 0.32 |  |
+| ('hsa-novel-ACA-368.id3702', 'ELOF1') | 10 | 0 | 2.69 | 0.29 |  |
+| ('hsa-novel-ACA-595.id3636', 'ENSG00000268400\|STXBP2') | 8 | 0 | 2.18 | 0.22 |  |
+| ('hsa-novel-ACA-368.id3702', 'MT-ATP6\|MT-CO3') | 8 | 2 | 0.44 | 0.1 | 4.96 |
+| ('hsa-novel-ACA-368.id3702', 'MT-ATP6') | 7 | 2 | 0.38 | 0.09 | 4.43 |
+| ('hsa-novel-ACA-652.id3749', 'RCC1\|SNHG3') | 7 | 0 | 1.92 | 0.18 |  |
+| ('hsa-novel-ACA-368.id3702', 'RPL31') | 7 | 2 | 0.38 | 0.09 | 4.43 |
+| ('hsa-novel-ACA-368.id3702', 'RPS3') | 7 | 0 | 1.92 | 0.18 |  |
+| ('hsa-novel-ACA-368.id3702', 'RPS23') | 6 | 1 | 0.56 | 0.09 | 35.4 |
+| ('hsa-novel-ACA-368.id3702', 'RPS24') | 6 | 1 | 0.56 | 0.09 | 35.4 |
+| ('hsa-novel-ACA-368.id3702', 'RPL8') | 6 | 0 | 1.67 | 0.15 |  |
+| ('hsa-novel-ACA-368.id3702', 'RPL5') | 5 | 0 | 1.41 | 0.12 |  |
+| ('hsa-novel-ACA-368.id3702', 'RPS9') | 5 | 0 | 1.41 | 0.12 |  |
+| ('hsa-novel-ACA-368.id3702', 'MT-ND4') | 5 | 0 | 1.41 | 0.12 |  |
+| ('hsa-novel-ACA-368.id3702', 'MT-CYB\|MT-TT') | 5 | 0 | 1.41 | 0.12 |  |
+| ('hsa-novel-ACA-503.id3323', 'MT-CO3') | 5 | 0 | 1.41 | 0.12 |  |
+| ('hsa-novel-ACA-368.id3702', 'ENSG00000280893\|ENSG00000281348\|PAGR1') | 5 | 0 | 1.41 | 0.12 |  |
+| ('hsa-novel-ACA-368.id3702', 'FTL') | 5 | 0 | 1.41 | 0.12 |  |
+| ('hsa-novel-ACA-368.id3702', 'ENSG00000284931\|HBG1') | 5 | 0 | 1.41 | 0.12 |  |
+| ('hsa-novel-ACA-514.id3382', 'OR11G2') | 5 | 0 | 1.41 | 0.12 |  |
+| ('hsa-novel-ACA-368.id3702', 'RCC1\|SNHG3') | 5 | 0 | 1.41 | 0.12 |  |
+| ('hsa-novel-ACA-368.id3702', 'PRAME') | 5 | 0 | 1.41 | 0.12 |  |
+| ('hsa-novel-ACA-368.id3702', 'RPL7A') | 4 | 0 | 1.15 | 0.08 |  |
+| ('hsa-novel-ACA-368.id3702', 'RPL18') | 4 | 0 | 1.15 | 0.08 |  |
+| ('hsa-novel-ACA-368.id3702', 'TUBA1C') | 4 | 1 | 0.38 | 0.05 | 25.27 |
+| ('hsa-novel-ACA-368.id3702', 'TCP1') | 4 | 0 | 1.15 | 0.08 |  |
+| ('hsa-novel-ACA-368.id3702', 'ENSG00000258344\|HNRNPA1') | 4 | 0 | 1.15 | 0.08 |  |
+
+
+**Read this as a candidate list, not a set of identified targets.** Two things about its
+shape argue for caution.
+
+*It is substantially an abundance ranking.* 19 mitochondrial and
+59 ribosomal-protein genes account for
+3.5% and
+6.9% of the chimeras respectively, and
+together they are 13 of the top 30 rows.
+Mitochondrial transcripts are the tell: dyskerin is nuclear and AluACAs are nucleoplasmic
+H/ACA RNPs, so an AluACA-MT-CO3 duplex is not physically available and those
+86 chimeras have to be ligation artefact. They are a free internal
+estimate of how much of this list is abundance-driven noise, and they sit near the top of it.
+
+*Per-gene counts are too thin to rank.* 1,113 of 1,688 targets
+(66%) rest on a single chimera, and only
+46 have five or more. The CI columns show the consequence --
+almost every row spans 1. The 1.49x enrichment is
+a property of the stratum in aggregate, where thousands of reads back it; it does not
+transfer to any individual gene in the table.
+
+What the list is good for is generating hypotheses to test directly -- and the obvious
+filter to apply first is whether a candidate has a plausible pseudouridylation pocket,
+i.e. whether the AluACA can form the >=8 bp bipartite duplex around a target uridine that
+H/ACA guiding requires. That is a sequence calculation this pipeline does not do.
+
+1,688 distinct mRNAs and 2,099 distinct guide-target pairs. Names joined by `|` are ambiguous calls, not composites: a `|` in a gene name means the arm overlaps both genes and the annotation cannot separate them, and a `|` in a guide name means the read matched those guides equally well. Treat both as unresolved rather than as a single identified target.
 
 ## How much of this survives scrutiny
 

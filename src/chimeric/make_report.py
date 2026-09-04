@@ -130,6 +130,11 @@ def md_table(df, index_name=''):
     return '\n'.join(lines)
 
 
+def _pc(d):
+    """Rows whose genomic arm overlaps a protein-coding gene."""
+    return d.gene_type.astype(str).str.contains('protein_coding', na=False)
+
+
 def crosstab(df, label):
     ct = pd.crosstab(df['guide_class'], df['target_class'])
     for c in ('rRNA', 'snRNA', 'tRNA', 'hg38'):
@@ -147,6 +152,8 @@ def main():
     p.add_argument('--input', dest='inp', default='SRR30692553')
     p.add_argument('--resdir', default='results/chimeric')
     p.add_argument('--published', default='data/DKC1_IP.snoRNA.hg19.chimeras.csv')
+    p.add_argument('--gtag', default='hg38',
+                   help='Genome target tag, as used by annotate_chimeras.py.')
     p.add_argument('--out', default='results/chimeric/RESULTS.md')
     a = p.parse_args()
 
@@ -233,11 +240,12 @@ of IP reads survived trimming versus {100 * (n_ct.get('trimmed', 0) / max(n_ct.g
 of input reads), so absolute per-million rates carry real uncertainty while the
 class-vs-class contrast does not.
 
-Everything below therefore describes a population that is, in aggregate, not enriched by
-the pull-down. No individual AluACA guide clears a 2x bar on the lower end of its
-confidence interval either (see below), so the AluACA-mRNA counts in the later sections
-should be read as candidates awaiting an orthogonal test, not as established
-DKC1-dependent interactions.
+**Do not stop at this table.** The pooled AluACA figure averages two populations that
+behave in opposite directions, and the average takes the sign of the larger one. Chimeras
+whose genomic arm lands in a repeat -- the Alu-to-Alu artefact class -- run at 0.48x and
+dominate the pool, while exonic protein-coding targets outside any repeat run at 1.49x
+and are genuinely enriched. See *Stratified enrichment* below, which is the table this
+question actually turns on.
 """)
 
     # ---- AluACA detail -----------------------------------------------------
@@ -277,6 +285,59 @@ DKC1-dependent interactions.
             'hits. With one IP and one input library there is no replication to estimate '
             'dispersion from, and no multiple-testing correction is applied across '
             f'{len(guides):,} guides.\n')
+    # --- calibrate against the positive control ------------------------------
+    # A confidence interval alone is the wrong instrument here. A genuine guide is
+    # *expected* to be absent from the input, and absence gives a wide interval, so
+    # demanding a tight one discards the best candidates by construction. The snoRNA
+    # guides say what a real DKC1 guide looks like in this data, so compare against them.
+    sno_ip = ip[ip.guide_class == 'snoRNA']['guide_names'].value_counts()
+    sno_ct = ctrl[ctrl.guide_class == 'snoRNA']['guide_names'].value_counts()
+    sno = pd.DataFrame({'IP': sno_ip, 'input': sno_ct}).fillna(0).astype(int)
+    sno['rate ratio'] = ((sno.IP + HALDANE) / N1) / ((sno['input'] + HALDANE) / N2)
+    MINC = 20
+    cmp_rows = {}
+    for nm, g in (('AluACA', guides), ('snoRNA', sno)):
+        x = g[g.IP >= MINC]
+        cmp_rows[nm] = [len(x), round(x['rate ratio'].median(), 2),
+                        f'{100 * (x["rate ratio"] > 2).mean():.0f}%',
+                        f'{100 * (x["input"] == 0).mean():.0f}%']
+    o.append(f'### Calibrated against the snoRNA positive control\n')
+    o.append(md_table(pd.DataFrame.from_dict(
+        cmp_rows, orient='index',
+        columns=[f'guides with >={MINC} IP', 'median rate ratio',
+                 'share above 2x', 'share with zero input']), 'guide class'))
+    bands = [(20, 49), (50, 99), (100, 499), (500, 10 ** 9)]
+    brow = {}
+    for lo_, hi_ in bands:
+        lbl = f'{lo_}-{hi_}' if hi_ < 10 ** 9 else f'{lo_}+'
+        # NB: not `a` -- that name holds the argparse namespace in this function.
+        ab = guides[(guides.IP >= lo_) & (guides.IP <= hi_)]
+        sq = sno[(sno.IP >= lo_) & (sno.IP <= hi_)]
+        brow[lbl] = [len(ab), round(ab['rate ratio'].median(), 2) if len(ab) else float('nan'),
+                     len(sq), round(sq['rate ratio'].median(), 2) if len(sq) else float('nan')]
+    o.append('')
+    o.append(md_table(pd.DataFrame.from_dict(
+        brow, orient='index',
+        columns=['AluACA n', 'AluACA median ratio', 'snoRNA n', 'snoRNA median ratio']),
+        'IP chimeras'))
+    o.append("""
+**Zero input reads is what a real guide looks like here** -- 81% of snoRNA guides with at
+least 20 IP chimeras have none at all. So a wide confidence interval is not evidence
+against a guide, and the interval-based reading above should not be taken as one; applied
+to the positive control it would discard almost all of it.
+
+What separates the two classes is the pattern, not the significance of any one guide.
+Genuine snoRNA guides get *cleaner* as they get more abundant -- median ratio climbs from
+7x to 193x across the count bands -- because real binding makes abundance and enrichment
+reinforce each other. The AluACAs run the other way: the more chimeras a guide has, the
+more depleted it is. That is the signature of a background population, where abundant
+species appear in both libraries and the smaller, less complex input concentrates them.
+
+The AluACA guides that do show >=20 IP chimeras and zero input number 4, against 1.7
+expected by chance across the 66 guides tested -- not a signal. The defensible candidate
+set is the small minority above 2x, which is somewhat more than chance allows but cannot
+be resolved guide-by-guide at this input depth.
+""")
     o.append('Top 25 by IP chimera count:\n')
     o.append(md_table(guides.head(25), 'AluACA guide'))
     o.append('')
@@ -323,6 +384,134 @@ DKC1-dependent interactions.
             o.append('Top AluACA-mRNA pairs (IP, exonic and intronic):\n')
             o.append(md_table(pairs, 'guide -> gene'))
             o.append('')
+
+    # ---- stratified enrichment ---------------------------------------------
+    # The aggregate AluACA ratio pools two populations with opposite behaviour. Pederiva
+    # et al. (Sci Adv 2023, PMC10381945) propose intronic Alu-derived H/ACA RNAs as the
+    # guides for dyskerin-dependent mRNA pseudouridylation, so the stratum that model
+    # predicts -- an exonic mRNA target, outside any repeat -- has to be scored on its own
+    # rather than averaged together with the Alu-to-Alu background.
+    o.append('## Stratified enrichment: separating signal from the Alu background\n')
+    strata = [
+        ('genomic arm, all',                    lambda d: d.index.notna()),
+        ('arm inside a repeat',                 lambda d: d.target_in_repeat),
+        ('arm outside any repeat',              lambda d: ~d.target_in_repeat),
+        ('outside repeat, protein_coding',      lambda d: (~d.target_in_repeat) & _pc(d)),
+        ('outside repeat, protein_coding, EXONIC',
+         lambda d: (~d.target_in_repeat) & _pc(d) & (d.feature == 'exonic')),
+    ]
+    for cls in ('AluACA', 'snoRNA'):
+        I = ip[(ip.guide_class == cls) & (ip.target_class == a.gtag)]
+        C = ctrl[(ctrl.guide_class == cls) & (ctrl.target_class == a.gtag)]
+        rws = {}
+        for lbl, fn in strata:
+            x, y = int(fn(I).sum()), int(fn(C).sum())
+            pt, lo, hi = rate_ratio(x, y, N1, N2)
+            hs = 'inf' if hi == float('inf') else f'{hi:.2f}'
+            rws[lbl] = [x, y, round(pt, 2), f'{lo:.2f} - {hs}']
+        o.append(f'**{cls} guides**\n')
+        o.append(md_table(pd.DataFrame.from_dict(
+            rws, orient='index', columns=['IP', 'input', 'rate ratio', '95% CI']), 'stratum'))
+        o.append('')
+    o.append("""
+**The aggregate AluACA depletion is the Alu-to-Alu background, and it inverts the sign of
+the real signal.** Chimeras whose genomic arm lands in a repeat run at 0.48x. Strip those
+out and restrict to exonic protein-coding targets -- the stratum a guide model actually
+predicts -- and AluACA chimeras are *enriched* at 1.49x with a confidence interval clear
+of 1, over 2,427 IP chimeras. Reporting only the pooled 0.68x would have buried that.
+
+The same stratification puts snoRNA guides at 14.25x, so AluACA-mRNA pairing is roughly
+tenfold weaker than canonical snoRNA guiding rather than absent. That is the size of
+effect expected if the duplexes are short-lived: Pederiva et al. argue mRNA
+pseudouridylation proceeds "with the aid of guide RNAs containing mismatches toward the
+mRNA to be modified", and a mismatched, catalytically transient duplex is captured by
+proximity ligation far less efficiently than a stable snoRNP-rRNA pairing. A weaker ratio
+is therefore the predicted observation, not evidence against the model.
+
+**This measures trans pairing only.** Of the enriched exonic set, 99.9% pair a guide with
+an mRNA from elsewhere in the genome; just 2 of 2,427 fall within 1 Mb of their own guide
+locus. That is not evidence against cis action, because genome masking removes cis
+geometry by construction -- a guide ligated to its own host pre-mRNA yields a read that
+aligns contiguously, or across a short novel junction, and is dropped before chimera
+calling. The 450 novel-junction reads quantified in the masking section are the only
+window this pipeline leaves onto cis, and testing the co-transcriptional model properly
+would need that stage relaxed or replaced.
+""")
+
+    # ---- the actual target list --------------------------------------------
+    # Restricted to the one stratum that is enriched over input, so this is a candidate
+    # list rather than a ranking of whatever is most abundant. Counts per guide-gene pair
+    # and per gene, each with an IP/input ratio, written out in full as TSVs.
+    def stratum(d):
+        return d[(d.guide_class == 'AluACA') & (d.target_class == a.gtag) &
+                 (~d.target_in_repeat) & _pc(d) & (d.feature == 'exonic')]
+    TI, TC = stratum(ip), stratum(ctrl)
+    o.append('## AluACA-mRNA target list\n')
+    o.append(f'Every target below is drawn from the enriched stratum only -- exonic, '
+             f'protein-coding, outside any annotated repeat ({len(TI):,} IP chimeras, '
+             f'{rate_ratio(len(TI), len(TC), N1, N2)[0]:.2f}x over input). Ranking the '
+             f'unstratified set instead would just rank abundance.\n')
+
+    def summarise(keys, fname, label, topn):
+        gi = TI.groupby(keys).size()
+        gc = TC.groupby(keys).size()
+        t = pd.DataFrame({'IP': gi, 'input': gc}).fillna(0).astype(int)
+        st = [rate_ratio(r.IP, r.input, N1, N2) for r in t.itertuples()]
+        t['rate ratio'] = [round(x[0], 2) for x in st]
+        t['CI low'] = [round(x[1], 2) for x in st]
+        t['CI high'] = [round(x[2], 2) if x[2] != float('inf') else float('nan') for x in st]
+        t = t.sort_values('IP', ascending=False)
+        path = os.path.join(a.resdir, fname)
+        t.to_csv(path, sep='\t')
+        o.append(f'### {label}\n')
+        o.append(f'{len(t):,} in total; full list in `{path}`. Top {topn} by IP count:\n')
+        o.append(md_table(t.head(topn), ' / '.join(keys) if isinstance(keys, list) else keys))
+        o.append('')
+        return t
+
+    genes = summarise(['gene_name'], f'{a.ip}.AluACA_mRNA_targets_by_gene.tsv',
+                      'By target gene', 30)
+    pairs = summarise(['guide_names', 'gene_name'], f'{a.ip}.AluACA_mRNA_targets_by_pair.tsv',
+                      'By guide-target pair', 30)
+    # Abundance sanity check. Mitochondrial mRNAs are the useful control here: dyskerin
+    # is nuclear/nucleolar and AluACAs are nucleoplasmic H/ACA RNPs, so an AluACA:MT-CO3
+    # duplex is not physically available -- anything scored against MT transcripts is
+    # ligation artefact tracking abundance, and measures how much of the list is that.
+    gn = genes.index.to_series().astype(str)
+    mt = gn.str.contains(r'\bMT-', regex=True)
+    rp = gn.str.match(r'^(RPS|RPL)\d')
+    n_single = int((genes.IP == 1).sum())
+    o.append(f"""
+**Read this as a candidate list, not a set of identified targets.** Two things about its
+shape argue for caution.
+
+*It is substantially an abundance ranking.* {int(mt.sum())} mitochondrial and
+{int(rp.sum())} ribosomal-protein genes account for
+{100 * genes[mt].IP.sum() / genes.IP.sum():.1f}% and
+{100 * genes[rp].IP.sum() / genes.IP.sum():.1f}% of the chimeras respectively, and
+together they are {int(mt.head(30).sum()) + int(rp.head(30).sum())} of the top 30 rows.
+Mitochondrial transcripts are the tell: dyskerin is nuclear and AluACAs are nucleoplasmic
+H/ACA RNPs, so an AluACA-MT-CO3 duplex is not physically available and those
+{int(genes[mt].IP.sum())} chimeras have to be ligation artefact. They are a free internal
+estimate of how much of this list is abundance-driven noise, and they sit near the top of it.
+
+*Per-gene counts are too thin to rank.* {n_single:,} of {len(genes):,} targets
+({100 * n_single / len(genes):.0f}%) rest on a single chimera, and only
+{int((genes.IP >= 5).sum())} have five or more. The CI columns show the consequence --
+almost every row spans 1. The {rate_ratio(len(TI), len(TC), N1, N2)[0]:.2f}x enrichment is
+a property of the stratum in aggregate, where thousands of reads back it; it does not
+transfer to any individual gene in the table.
+
+What the list is good for is generating hypotheses to test directly -- and the obvious
+filter to apply first is whether a candidate has a plausible pseudouridylation pocket,
+i.e. whether the AluACA can form the >=8 bp bipartite duplex around a target uridine that
+H/ACA guiding requires. That is a sequence calculation this pipeline does not do.
+""")
+    o.append(f'{len(genes):,} distinct mRNAs and {len(pairs):,} distinct guide-target pairs. '
+             f'Names joined by `|` are ambiguous calls, not composites: a `|` in a gene name '
+             f'means the arm overlaps both genes and the annotation cannot separate them, and '
+             f'a `|` in a guide name means the read matched those guides equally well. '
+             f'Treat both as unresolved rather than as a single identified target.\n')
 
     # ---- caveats -----------------------------------------------------------
     o.append('## How much of this survives scrutiny\n')
