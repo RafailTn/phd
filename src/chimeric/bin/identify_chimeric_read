@@ -1,0 +1,2 @@
+#!/usr/bin/env bash
+exec "/home/rafail/Downloads/phd/deps/.pixi/envs/default/bin/python" "/home/rafail/Downloads/phd/src/chimeric/scripts/identify_chimeric_read.py" "$@"

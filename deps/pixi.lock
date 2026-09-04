@@ -31,6 +31,7 @@ environments:
       - conda: https://conda.anaconda.org/bioconda/linux-64/seqkit-2.13.0-he881be0_0.conda
       - conda: https://conda.anaconda.org/bioconda/linux-64/sra-tools-3.4.1-2_linux_64.conda
       - conda: https://conda.anaconda.org/bioconda/linux-64/star-2.7.11b-h5ca1c30_8.conda
+      - conda: https://conda.anaconda.org/bioconda/linux-64/ucsc-bedgraphtobigwig-482-hdc0a859_0.tar.bz2
       - conda: https://conda.anaconda.org/bioconda/linux-64/ucsc-liftover-482-h0b57e2e_0.tar.bz2
       - conda: https://conda.anaconda.org/bioconda/linux-64/umi_tools-1.1.6-py312h0fa9677_0.tar.bz2
       - conda: https://conda.anaconda.org/bioconda/linux-64/viennarna-2.7.2-py312pl5321h245ea3e_1.conda
@@ -40,6 +41,7 @@ environments:
       - conda: https://conda.anaconda.org/bioconda/noarch/perl-test2-suite-0.000163-pl5321hdfd78af_0.tar.bz2
       - conda: https://conda.anaconda.org/conda-forge/linux-64/_openmp_mutex-4.5-20_gnu.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/backports.zstd-1.7.0-py312h3f22e6b_0.conda
+      - conda: https://conda.anaconda.org/conda-forge/linux-64/biopython-1.88-py312h4c3975b_0.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/brotli-1.2.0-h505cf86_3.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/brotli-bin-1.2.0-h9908984_3.conda
       - conda: https://conda.anaconda.org/conda-forge/linux-64/bzip2-1.0.8-hda65f42_10.conda
@@ -207,7 +209,6 @@ environments:
       - conda: https://conda.anaconda.org/conda-forge/noarch/tzdata-2026c-h151e31d_0.conda
       - conda: https://conda.anaconda.org/conda-forge/noarch/xopen-2.1.0-pyh707e725_0.conda
       - pypi: https://files.pythonhosted.org/packages/0c/29/0348de65b8cc732daa3e33e67806420b2ae89bdce2b04af740289c5c6c8c/loguru-0.7.3-py3-none-any.whl
-      - pypi: https://files.pythonhosted.org/packages/17/c8/eb65662fc83a0590f9071f49c93001a35e1f1cbbaef2a919716bd32ace51/cmder-5.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/1e/77/dc8c558f7593132cf8fefec57c4f60c83b16941c574ac5f619abb3ae7933/dill-0.4.1-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/2a/ac/4d5f104edf2aae2fec85567ec1d1969010de8124c5c45514f25e14900b65/pox-0.3.7-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/37/44/be2146c650ee9ca4d9a770c995f5c92c1ea52292dcf618ce1a336d3146dd/pathos-0.3.5-py3-none-any.whl
@@ -215,6 +216,7 @@ environments:
       - pypi: https://files.pythonhosted.org/packages/7b/98/f6aa7fe0783e42be3093d8ef1b0ecdc22c34c0d69640dfb37f56925cb141/anytree-2.13.0-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/85/86/82dbf367e665ec0c9ba0f6479efda68f08acf84d44c357b3549545701f95/seqflow-0.1.4-py3-none-any.whl
       - pypi: https://files.pythonhosted.org/packages/8e/e1/d1b380af6443e7c33aeb40617ebdc17c39dc30095235643cc518e3908203/ppft-1.7.8-py3-none-any.whl
+      - pypi: https://files.pythonhosted.org/packages/f9/28/f11952456d2ce7da89aa0399148d3d123643519944a65bd28a80b06c3ce0/cmder-3.8-py3-none-any.whl
 packages:
 - conda: https://conda.anaconda.org/bioconda/linux-64/bedtools-2.31.1-h13024bc_3.tar.bz2
   sha256: d8b7aef31be37da761a87e1263ea00d62b67134b546f018067786aa6d3dccfac
@@ -498,6 +500,25 @@ packages:
     - star >=2.7.11b,<3.0a0
   size: 1352581
   timestamp: 1763122539711
+- conda: https://conda.anaconda.org/bioconda/linux-64/ucsc-bedgraphtobigwig-482-hdc0a859_0.tar.bz2
+  sha256: c8afc8152f569c7730b8f3eb6894a8b277912fdbd0ab8c9d18bb8c1840c89669
+  md5: 8f00d127d2a1f0a250558e2a00b4448a
+  depends:
+  - bzip2 >=1.0.8,<2.0a0
+  - libgcc >=13
+  - liblzma >=5.8.1,<6.0a0
+  - libopenssl-static
+  - libpng >=1.6.49,<1.7.0a0
+  - libuuid >=2.38.1,<3.0a0
+  - libzlib >=1.3.1,<2.0a0
+  - mysql-connector-c >=6.1.11,<6.1.12.0a0
+  license: Varies; see https://genome.ucsc.edu/license
+  purls: []
+  run_exports:
+    weak:
+    - ucsc-bedgraphtobigwig >=482
+  size: 521625
+  timestamp: 1750540019644
 - conda: https://conda.anaconda.org/bioconda/linux-64/ucsc-liftover-482-h0b57e2e_0.tar.bz2
   sha256: e5237e5f0afd6df92a8aa02197631906f8f7598bb2e30f1def896034e7c36024
   md5: 37fa65c88c2a63fb54b320db20a23908
@@ -651,6 +672,21 @@ packages:
   run_exports: {}
   size: 240967
   timestamp: 1786861419155
+- conda: https://conda.anaconda.org/conda-forge/linux-64/biopython-1.88-py312h4c3975b_0.conda
+  sha256: 22abe88e4f8811e16d70c5cb98ffa987ffed5108e48f731bde4984c2e74c407c
+  md5: e443f45e39a4aa72773a4d708bcfefad
+  depends:
+  - __glibc >=2.17,<3.0.a0
+  - libgcc >=14
+  - numpy
+  - python >=3.12,<3.13.0a0
+  - python_abi 3.12.* *_cp312
+  license: LicenseRef-Biopython
+  purls:
+  - pkg:pypi/biopython?source=compressed-mapping
+  run_exports: {}
+  size: 3252601
+  timestamp: 1786018993769
 - conda: https://conda.anaconda.org/conda-forge/linux-64/brotli-1.2.0-h505cf86_3.conda
   sha256: 1f2ccfebe6e0113bfc473b21906372c1ee4eb69bf6faef0ad7f3d4d79af63a98
   md5: 6ff307b78fbfb7dcafb7e25ff8bc9c10
@@ -3203,11 +3239,6 @@ packages:
   - build==1.2.2 ; python_full_version >= '3.11' and extra == 'dev'
   - twine==6.0.1 ; python_full_version >= '3.11' and extra == 'dev'
   requires_python: '>=3.5,<4.0'
-- pypi: https://files.pythonhosted.org/packages/17/c8/eb65662fc83a0590f9071f49c93001a35e1f1cbbaef2a919716bd32ace51/cmder-5.0-py3-none-any.whl
-  name: cmder
-  version: '5.0'
-  sha256: f0ec07bc2d4ea29bbbdbcd6e30fd655de08d8f717d60971b86b0d657dd74303d
-  requires_python: '>=3.6'
 - pypi: https://files.pythonhosted.org/packages/1e/77/dc8c558f7593132cf8fefec57c4f60c83b16941c574ac5f619abb3ae7933/dill-0.4.1-py3-none-any.whl
   name: dill
   version: 0.4.1
@@ -3260,3 +3291,8 @@ packages:
   requires_dist:
   - dill>=0.4.1 ; extra == 'dill'
   requires_python: '>=3.9'
+- pypi: https://files.pythonhosted.org/packages/f9/28/f11952456d2ce7da89aa0399148d3d123643519944a65bd28a80b06c3ce0/cmder-3.8-py3-none-any.whl
+  name: cmder
+  version: '3.8'
+  sha256: 59a0cb308be2c1a9959fd4b91448f67d240b819c9e074ec120c8a101c6090634
+  requires_python: '>=3.6'

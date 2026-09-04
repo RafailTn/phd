@@ -28,6 +28,9 @@ pandas  = ">=2.2,<3"
 viennarna = ">=2.6,<3"     
 parallel  = "*"            
 fire = ">=0.7.1,<0.8"
+biopython = ">=1.88,<2"
+ucsc-bedgraphtobigwig = ">=482,<483"
 
 [pypi-dependencies]
 seqflow = ">=0.1.4, <0.2"
+cmder = "==3.8"

@@ -1,5 +1,12 @@
 data/
 ref/
 work/
-results/
 psi-vault/
+
+# results are regenerable and large, so they stay out of the repo -- except the
+# generated write-up. Note the directory itself must not be excluded, or the
+# negation below cannot re-include anything inside it.
+results/*
+!results/chimeric/
+results/chimeric/*
+!results/chimeric/RESULTS.md
