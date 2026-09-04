@@ -17,14 +17,40 @@ import re
 import sys
 
 import pandas as pd
+from scipy.stats import beta
 
-# A guide is called enriched when its IP rate exceeds its input rate by this factor,
-# after scaling both to chimeras per million trimmed reads. The input library is ~4x
-# smaller, so raw counts are not comparable and a pseudocount is needed for guides
-# absent from input.
+# Enrichment is reported as a rate ratio (IP rate / input rate) with an exact 95%
+# confidence interval, and a guide only counts as enriched if the *lower* bound clears
+# this factor. Judging on the point estimate alone credits guides whose apparent
+# enrichment rests on a handful of reads.
 ENRICH_FOLD = 2.0
-PSEUDO = 1.0
-MIN_IP_CHIMERAS = 3
+CONF = 0.95
+# Haldane-Anscombe: half a read added to each raw count before dividing by library size.
+# The correction belongs on the count, which is the Poisson-distributed quantity, not on
+# the derived per-million rate -- adding a constant to the rate makes the shrinkage depend
+# on library size, so with a 7.8x size difference it penalises the two libraries unequally
+# and squashes every zero-input guide into a narrow band.
+HALDANE = 0.5
+
+
+def rate_ratio(x, y, s1, s2, conf=CONF):
+    """Rate ratio (x/s1)/(y/s2) with an exact confidence interval.
+
+    Counts are Poisson: x ~ Pois(lambda1*s1), y ~ Pois(lambda2*s2). Conditional on the
+    total n = x+y, x ~ Binomial(n, pi) with pi = lambda1*s1/(lambda1*s1 + lambda2*s2),
+    and the rate ratio is (pi/(1-pi)) * (s2/s1). A Clopper-Pearson exact interval on pi
+    therefore maps monotonically onto an interval for the ratio -- no pseudocount needed
+    for the interval, and it collapses toward 1 on its own when counts are thin.
+    """
+    point = ((x + HALDANE) / s1) / ((y + HALDANE) / s2)
+    n = x + y
+    if n == 0:
+        return point, 0.0, float('inf')
+    a = (1 - conf) / 2
+    p_lo = 0.0 if x == 0 else beta.ppf(a, x, n - x + 1)
+    p_hi = 1.0 if x == n else beta.ppf(1 - a, x + 1, n - x)
+    to_r = lambda p: (p / (1 - p)) * (s2 / s1) if p < 1 else float('inf')
+    return point, to_r(p_lo), to_r(p_hi)
 
 
 def read_counts(outdir, uid):
@@ -167,23 +193,25 @@ def main():
     scale_ip = (n_ip.get('trimmed') or 1) / 1e6
     scale_ct = (n_ct.get('trimmed') or 1) / 1e6
     o.append('## IP enrichment by guide class\n')
+    N1 = n_ip.get('trimmed') or 1
+    N2 = n_ct.get('trimmed') or 1
     rows = {}
-    for cls in ('AluACA', 'snoRNA', 'ambiguous'):
-        i, c = int((ip.guide_class == cls).sum()), int((ctrl.guide_class == cls).sum())
-        rows[cls] = [i, c, i / scale_ip, c / scale_ct,
-                     (i / scale_ip) / (c / scale_ct) if c else float('inf')]
-    ti, tc_ = len(ip), len(ctrl)
-    rows['all'] = [ti, tc_, ti / scale_ip, tc_ / scale_ct,
-                   (ti / scale_ip) / (tc_ / scale_ct) if tc_ else float('inf')]
+    for cls in ('AluACA', 'snoRNA', 'ambiguous', 'all'):
+        if cls == 'all':
+            i, c = len(ip), len(ctrl)
+        else:
+            i, c = int((ip.guide_class == cls).sum()), int((ctrl.guide_class == cls).sum())
+        pt, lo, hi = rate_ratio(i, c, N1, N2)
+        rows[cls] = [i, c, i / scale_ip, c / scale_ct, pt, f'{lo:.2f} - {hi:.2f}']
     enr = pd.DataFrame.from_dict(
         rows, orient='index',
-        columns=['IP', 'input', 'IP per M', 'input per M', 'fold IP/input'])
+        columns=['IP', 'input', 'IP per M', 'input per M', 'rate ratio', '95% CI'])
     # Keep the raw counts integral; .round() alone would render them as 13,759.00.
     enr['IP'] = enr['IP'].astype(int)
     enr['input'] = enr['input'].astype(int)
     for c in ('IP per M', 'input per M'):
         enr[c] = enr[c].round(1)
-    enr['fold IP/input'] = enr['fold IP/input'].round(2)
+    enr['rate ratio'] = enr['rate ratio'].round(2)
     o.append(md_table(enr, 'guide class'))
 
     alu_f = rows['AluACA'][4]
@@ -206,10 +234,10 @@ of input reads), so absolute per-million rates carry real uncertainty while the
 class-vs-class contrast does not.
 
 Everything below therefore describes a population that is, in aggregate, not enriched by
-the pull-down. Individual guides may still be real -- {'{n_enr}'} of them do clear the
-per-guide enrichment bar -- but the AluACA-mRNA counts in the later sections should be
-read as candidates awaiting an orthogonal test, not as established DKC1-dependent
-interactions.
+the pull-down. No individual AluACA guide clears a 2x bar on the lower end of its
+confidence interval either (see below), so the AluACA-mRNA counts in the later sections
+should be read as candidates awaiting an orthogonal test, not as established
+DKC1-dependent interactions.
 """)
 
     # ---- AluACA detail -----------------------------------------------------
@@ -221,20 +249,36 @@ interactions.
     gi = alu_ip['guide_names'].value_counts()
     gc = alu_ct['guide_names'].value_counts()
     guides = pd.DataFrame({'IP': gi, 'input': gc}).fillna(0).astype(int)
-    guides['IP per M'] = guides['IP'] / scale_ip
-    guides['input per M'] = guides['input'] / scale_ct
-    guides['fold'] = ((guides['IP'] / scale_ip + PSEUDO) /
-                      (guides['input'] / scale_ct + PSEUDO))
-    guides['IP-enriched'] = ((guides['fold'] >= ENRICH_FOLD) &
-                             (guides['IP'] >= MIN_IP_CHIMERAS)).map({True: 'yes', False: ''})
+    stats = [rate_ratio(r.IP, r.input, N1, N2) for r in guides.itertuples()]
+    guides['IP per M'] = (guides['IP'] / scale_ip).round(2)
+    guides['input per M'] = (guides['input'] / scale_ct).round(2)
+    guides['rate ratio'] = [round(x[0], 2) for x in stats]
+    # Threshold on the unrounded bound: a true 1.9996 displays as 2.00 and would
+    # otherwise be counted as clearing a 2x bar it does not actually clear.
+    ci_low_raw = [x[1] for x in stats]
+    guides['CI low'] = [round(v, 2) for v in ci_low_raw]
+    guides['CI high'] = [round(x[2], 2) if x[2] != float('inf') else float('nan')
+                         for x in stats]
+    n_enr = int(sum(1 for v in ci_low_raw if v >= ENRICH_FOLD))
     guides = guides.sort_values('IP', ascending=False)
-    n_enr = (guides['IP-enriched'] == 'yes').sum()
-    o.append(f'{len(guides):,} distinct AluACA guides carry at least one chimera in the IP; '
-             f'**{n_enr:,}** are IP-enriched (>= {ENRICH_FOLD:g}x over input per million '
-             f'trimmed reads, with >= {MIN_IP_CHIMERAS} IP chimeras).\n')
-    o = [x.replace('{n_enr}', str(n_enr)) if isinstance(x, str) else x for x in o]
+    verb = 'has' if n_enr == 1 else 'have'
+    o.append(f'{len(guides):,} distinct AluACA guides carry at least one chimera in the IP. '
+             f'**{n_enr:,}** {verb} a 95% CI lower bound at or above {ENRICH_FOLD:g}x.\n')
+    if n_enr == 0:
+        best = rate_ratio(27, 0, N1, N2)[0]
+        o.append(
+            'No individual AluACA guide is demonstrably enriched. Several have eye-catching '
+            'point estimates -- a guide with 27 IP chimeras and none at all in the input '
+            f'scores {best:.1f}x -- but with only {N2 / 1e6:.1f} M input reads, an unenriched '
+            'guide at that rate would be expected to yield roughly 3 input reads, so observing '
+            'zero is weak evidence and the interval reaches below 1. Ranking on the point '
+            'estimate alone promotes about a dozen guides on exactly that basis.\n\n'
+            'The table below is a shortlist ordered by IP count, not a set of significant '
+            'hits. With one IP and one input library there is no replication to estimate '
+            'dispersion from, and no multiple-testing correction is applied across '
+            f'{len(guides):,} guides.\n')
     o.append('Top 25 by IP chimera count:\n')
-    o.append(md_table(guides.head(25).round(2), 'AluACA guide'))
+    o.append(md_table(guides.head(25), 'AluACA guide'))
     o.append('')
 
     # ---- targets -----------------------------------------------------------

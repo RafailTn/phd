@@ -35,14 +35,14 @@ Masking keeps only reads that fail to align end-to-end to both the RepBase human
 
 ## IP enrichment by guide class
 
-| guide class | IP | input | IP per M | input per M | fold IP/input |
-|---|---|---|---|---|---|
-| AluACA | 13,759 | 2,607 | 1,166.4 | 1,723.1 | 0.68 |
-| snoRNA | 49,945 | 502 | 4,234 | 331.8 | 12.76 |
-| ambiguous | 283 | 53 | 24 | 35 | 0.68 |
-| all | 63,987 | 3,162 | 5,424.4 | 2,089.9 | 2.6 |
+| guide class | IP | input | IP per M | input per M | rate ratio | 95% CI |
+|---|---|---|---|---|---|---|
+| AluACA | 13,759 | 2,607 | 1,166.4 | 1,723.1 | 0.68 | 0.65 - 0.71 |
+| snoRNA | 49,945 | 502 | 4,234 | 331.8 | 12.75 | 11.69 - 13.96 |
+| ambiguous | 283 | 53 | 24 | 35 | 0.68 | 0.51 - 0.94 |
+| all | 63,987 | 3,162 | 5,424.4 | 2,089.9 | 2.6 | 2.50 - 2.69 |
 
-**Canonical snoRNA-guided chimeras enrich 12.8x in the IP. AluACA-guided chimeras
+**Canonical snoRNA-guided chimeras enrich 12.7x in the IP. AluACA-guided chimeras
 do not enrich at all (0.68x) -- they are marginally *depleted*.**
 
 DKC1 is the H/ACA pseudouridine synthase, so the snoRNA number is the positive control
@@ -59,46 +59,50 @@ of input reads), so absolute per-million rates carry real uncertainty while the
 class-vs-class contrast does not.
 
 Everything below therefore describes a population that is, in aggregate, not enriched by
-the pull-down. Individual guides may still be real -- 14 of them do clear the
-per-guide enrichment bar -- but the AluACA-mRNA counts in the later sections should be
-read as candidates awaiting an orthogonal test, not as established DKC1-dependent
-interactions.
+the pull-down. No individual AluACA guide clears a 2x bar on the lower end of its
+confidence interval either (see below), so the AluACA-mRNA counts in the later sections
+should be read as candidates awaiting an orthogonal test, not as established
+DKC1-dependent interactions.
 
 ## AluACA-guided chimeras
 
 **13,759** in the IP, **2,607** in the input.
 
-1,856 distinct AluACA guides carry at least one chimera in the IP; **14** are IP-enriched (>= 2x over input per million trimmed reads, with >= 3 IP chimeras).
+1,856 distinct AluACA guides carry at least one chimera in the IP. **0** have a 95% CI lower bound at or above 2x.
+
+No individual AluACA guide is demonstrably enriched. Several have eye-catching point estimates -- a guide with 27 IP chimeras and none at all in the input scores 7.1x -- but with only 1.5 M input reads, an unenriched guide at that rate would be expected to yield roughly 3 input reads, so observing zero is weak evidence and the interval reaches below 1. Ranking on the point estimate alone promotes about a dozen guides on exactly that basis.
+
+The table below is a shortlist ordered by IP count, not a set of significant hits. With one IP and one input library there is no replication to estimate dispersion from, and no multiple-testing correction is applied across 1,856 guides.
 
 Top 25 by IP chimera count:
 
-| AluACA guide | IP | input | IP per M | input per M | fold | IP-enriched |
-|---|---|---|---|---|---|---|
-| hsa-novel-ACA-514.id3382 | 1,893 | 642 | 160.48 | 424.33 | 0.38 |  |
-| hsa-novel-ACA-368.id3702 | 1,752 | 162 | 148.52 | 107.07 | 1.38 |  |
-| hsa-novel-ACA-616.id3504 | 1,554 | 300 | 131.74 | 198.28 | 0.67 |  |
-| hsa-novel-ACA-652.id3749 | 945 | 226 | 80.11 | 149.37 | 0.54 |  |
-| hsa-novel-ACA-786.id3589 | 537 | 122 | 45.52 | 80.64 | 0.57 |  |
-| hsa-novel-ACA-815.id3217 | 524 | 116 | 44.42 | 76.67 | 0.58 |  |
-| hsa-novel-ACA-390.id3601 | 131 | 18 | 11.11 | 11.9 | 0.94 |  |
-| hsa-novel-ACA-595.id3636 | 129 | 21 | 10.94 | 13.88 | 0.8 |  |
-| hsa-novel-ACA-847.id3429 | 119 | 27 | 10.09 | 17.85 | 0.59 |  |
-| hsa-novel-ACA-535.id3595 | 106 | 27 | 8.99 | 17.85 | 0.53 |  |
-| hsa-novel-ACA-562.id3441 | 89 | 1 | 7.54 | 0.66 | 5.14 | yes |
-| hsa-novel-ACA-806.id3686 | 89 | 24 | 7.54 | 15.86 | 0.51 |  |
-| hsa-novel-ACA-426.id3277 | 85 | 21 | 7.21 | 13.88 | 0.55 |  |
-| hsa-novel-ACA-491.id3583 | 77 | 19 | 6.53 | 12.56 | 0.56 |  |
-| AluACA280_hsa-novel-ACA-662.id3422 | 77 | 14 | 6.53 | 9.25 | 0.73 |  |
-| hsa-novel-ACA-713.id3155 | 74 | 8 | 6.27 | 5.29 | 1.16 |  |
-| hsa-novel-ACA-368.id3702\|hsa-novel-ACA-390.id3601 | 68 | 5 | 5.76 | 3.3 | 1.57 |  |
-| hsa-novel-ACA-503.id3323 | 65 | 11 | 5.51 | 7.27 | 0.79 |  |
-| hsa-novel-ACA-259.id3667 | 62 | 12 | 5.26 | 7.93 | 0.7 |  |
-| hsa-novel-ACA-486.id3629\|hsa-novel-ACA-616.id3504 | 60 | 16 | 5.09 | 10.58 | 0.53 |  |
-| hsa-novel-ACA-574.id3453 | 50 | 7 | 4.24 | 4.63 | 0.93 |  |
-| hsa-novel-ACA-341.id3501 | 50 | 7 | 4.24 | 4.63 | 0.93 |  |
-| hsa-novel-ACA-258.id3530 | 47 | 4 | 3.98 | 2.64 | 1.37 |  |
-| hsa-novel-ACA-390.id3601\|hsa-novel-ACA-503.id3323 | 45 | 4 | 3.81 | 2.64 | 1.32 |  |
-| hsa-novel-ACA-747.id3390 | 44 | 1 | 3.73 | 0.66 | 2.85 | yes |
+| AluACA guide | IP | input | IP per M | input per M | rate ratio | CI low | CI high |
+|---|---|---|---|---|---|---|---|
+| hsa-novel-ACA-514.id3382 | 1,893 | 642 | 160.48 | 424.33 | 0.38 | 0.35 | 0.41 |
+| hsa-novel-ACA-368.id3702 | 1,752 | 162 | 148.52 | 107.07 | 1.38 | 1.18 | 1.64 |
+| hsa-novel-ACA-616.id3504 | 1,554 | 300 | 131.74 | 198.28 | 0.66 | 0.59 | 0.75 |
+| hsa-novel-ACA-652.id3749 | 945 | 226 | 80.11 | 149.37 | 0.54 | 0.46 | 0.62 |
+| hsa-novel-ACA-786.id3589 | 537 | 122 | 45.52 | 80.64 | 0.56 | 0.46 | 0.69 |
+| hsa-novel-ACA-815.id3217 | 524 | 116 | 44.42 | 76.67 | 0.58 | 0.47 | 0.71 |
+| hsa-novel-ACA-390.id3601 | 131 | 18 | 11.11 | 11.9 | 0.91 | 0.57 | 1.62 |
+| hsa-novel-ACA-595.id3636 | 129 | 21 | 10.94 | 13.88 | 0.77 | 0.49 | 1.32 |
+| hsa-novel-ACA-847.id3429 | 119 | 27 | 10.09 | 17.85 | 0.56 | 0.37 | 0.89 |
+| hsa-novel-ACA-535.id3595 | 106 | 27 | 8.99 | 17.85 | 0.5 | 0.33 | 0.8 |
+| hsa-novel-ACA-562.id3441 | 89 | 1 | 7.54 | 0.66 | 7.65 | 2 | 455.88 |
+| hsa-novel-ACA-806.id3686 | 89 | 24 | 7.54 | 15.86 | 0.47 | 0.3 | 0.78 |
+| hsa-novel-ACA-426.id3277 | 85 | 21 | 7.21 | 13.88 | 0.51 | 0.32 | 0.88 |
+| hsa-novel-ACA-491.id3583 | 77 | 19 | 6.53 | 12.56 | 0.51 | 0.31 | 0.91 |
+| AluACA280_hsa-novel-ACA-662.id3422 | 77 | 14 | 6.53 | 9.25 | 0.69 | 0.4 | 1.35 |
+| hsa-novel-ACA-713.id3155 | 74 | 8 | 6.27 | 5.29 | 1.12 | 0.57 | 2.85 |
+| hsa-novel-ACA-368.id3702\|hsa-novel-ACA-390.id3601 | 68 | 5 | 5.76 | 3.3 | 1.6 | 0.71 | 5.54 |
+| hsa-novel-ACA-503.id3323 | 65 | 11 | 5.51 | 7.27 | 0.73 | 0.4 | 1.59 |
+| hsa-novel-ACA-259.id3667 | 62 | 12 | 5.26 | 7.93 | 0.64 | 0.35 | 1.35 |
+| hsa-novel-ACA-486.id3629\|hsa-novel-ACA-616.id3504 | 60 | 16 | 5.09 | 10.58 | 0.47 | 0.27 | 0.89 |
+| hsa-novel-ACA-574.id3453 | 50 | 7 | 4.24 | 4.63 | 0.86 | 0.41 | 2.4 |
+| hsa-novel-ACA-341.id3501 | 50 | 7 | 4.24 | 4.63 | 0.86 | 0.41 | 2.4 |
+| hsa-novel-ACA-258.id3530 | 47 | 4 | 3.98 | 2.64 | 1.35 | 0.55 | 5.76 |
+| hsa-novel-ACA-390.id3601\|hsa-novel-ACA-503.id3323 | 45 | 4 | 3.81 | 2.64 | 1.3 | 0.53 | 5.52 |
+| hsa-novel-ACA-747.id3390 | 44 | 1 | 3.73 | 0.66 | 3.81 | 0.96 | 227.91 |
 
 ## What the AluACA guides pair with
 
