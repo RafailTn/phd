@@ -152,7 +152,7 @@ so the two halves of the project agree on where things live:
 
 | what | looked for in, in order |
 | --- | --- |
-| inputs | `./`, then `$PROJ/`, then `$PROJ/data/` |
+| inputs | `$PROJ/`, then `$PROJ/data/`, then anywhere under `$PROJ` |
 | outputs | `$OUT`, or `$PROJ` when `OUT` is unset |
 | tools (`bedtools`, `water`) | `--flag`, `$BEDTOOLS`/`$WATER`, `$BIN`, `$PROJ/deps/.pixi/envs/default/bin`, `PATH` |
 
@@ -187,6 +187,13 @@ A missing input is fatal and names the three directories searched. A missing
 `--bed` in `collapse_duplicates.py` is not: the merge runs and the coordinate
 correction is skipped with a note.
 
-Note that the current directory is consulted first, so running from an
-unrelated directory that happens to contain a same-named file will silently
-pick that one up.
+The search never leaves `$PROJ`. The current directory is deliberately not
+consulted, so running from an unrelated directory that happens to contain a
+same-named file cannot silently pick that one up; an input outside the project
+has to be named with its flag.
+
+When a file is not in one of the two conventional places, the whole project is
+walked. `deps/`, `.git/`, `__pycache__/` and the STAR index directories are
+skipped -- the vendored conda environment alone is ~28k files, and none of it
+is ours to match against. Of several matches the shallowest wins, ties broken
+alphabetically, so the choice never depends on filesystem order.

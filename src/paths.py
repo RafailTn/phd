@@ -1,20 +1,30 @@
-"""Input/output/tool lookup shared by the analysis scripts.
+"""Input/output/tool lookup shared by the analysis and chimeric scripts.
 
-Mirrors loci_extraction/config.sh so the two halves of the project agree on
-where things live:
+Mirrors loci_extraction/config.sh and chimeric/config.sh so the halves of the
+project agree on where things live:
 
-  inputs   ./  ->  $PROJ/  ->  $PROJ/data/          (data/ is the server layout)
+  inputs   $PROJ/  ->  $PROJ/data/  ->  anywhere under $PROJ
   outputs  $OUT, or $PROJ when OUT is unset
   tools    $BIN -> the pixi env under $PROJ/deps -> PATH
 
 $PROJ is taken from the environment when set, otherwise found by walking up
 from this file until a directory looks like the project root.
+
+Input lookup never leaves $PROJ. The current directory is deliberately not
+searched: it is usually the project root anyway, and when it is not, a
+same-named file in an unrelated directory would be picked up silently.
 """
 
 import os
 import shutil
 
 _HERE = os.path.dirname(os.path.abspath(__file__))
+
+# Skipped by the recursive input search. deps/ is a vendored conda environment
+# of ~28k files that are not ours to match against; the STAR indices are large
+# and hold no inputs. Both would only slow the walk down and invite collisions.
+_PRUNE_DIRS = {".git", "deps", "__pycache__"}
+_PRUNE_SUFFIXES = ("_star_index",)
 
 # Any one of these at a directory's root -- or inside its data/ -- marks it as
 # the project root.  Several markers rather than one because a checkout may be
@@ -44,17 +54,48 @@ def proj():
 
 
 def search_dirs():
-    """The directories find_input consults, in order."""
-    return [os.curdir, proj(), os.path.join(proj(), "data")]
+    """The directories find_input checks before falling back to a full walk."""
+    return [proj(), os.path.join(proj(), "data")]
+
+
+_index = None
+
+
+def _repo_index():
+    """basename -> [paths], for every file under $PROJ outside the pruned dirs.
+
+    Built once on the first lookup that misses the conventional directories, so
+    a checkout with everything in data/ never pays for the walk.
+    """
+    global _index
+    if _index is None:
+        _index = {}
+        # followlinks stays False: a symlink out of the tree must not become a
+        # way for the search to leave $PROJ.
+        for dirpath, dirnames, filenames in os.walk(proj()):
+            dirnames[:] = [d for d in dirnames
+                           if d not in _PRUNE_DIRS
+                           and not d.endswith(_PRUNE_SUFFIXES)]
+            for fn in filenames:
+                _index.setdefault(fn, []).append(os.path.join(dirpath, fn))
+    return _index
 
 
 def find_input(basename):
-    """First search directory holding the file; else the $PROJ path, so the
-    caller can report a sensible location when it is missing."""
+    """Locate an input by name, without leaving $PROJ.
+
+    The conventional homes are checked first, then anywhere under the project
+    root. Of several matches the shallowest wins, ties broken alphabetically,
+    so the answer does not depend on filesystem order. Returns the $PROJ path
+    when nothing is found, so the caller can report a sensible location.
+    """
     for d in search_dirs():
         cand = os.path.join(d, basename)
         if os.path.exists(cand):
             return os.path.normpath(cand)
+    hits = _repo_index().get(basename)
+    if hits:
+        return min(hits, key=lambda p: (p.count(os.sep), p))
     return os.path.join(proj(), basename)
 
 
@@ -82,9 +123,10 @@ def find_tool(name, explicit=None):
 
 def require(pairs):
     """pairs: (label, path).  Exit with a useful message on the first missing
-    one, naming the directories that were searched."""
+    one, naming where it was looked for."""
     import sys
     for label, path in pairs:
         if not path or not os.path.exists(path):
             sys.exit(f"missing {label}: {path}\n  looked in "
-                     + ", ".join(os.path.abspath(d) for d in search_dirs()))
+                     + ", ".join(os.path.abspath(d) for d in search_dirs())
+                     + f", and anywhere under {proj()}")

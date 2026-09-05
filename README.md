@@ -32,6 +32,69 @@ bash src/loci_extraction/run_all.sh --hg38-dir /ref/hg38 --work "$TMPDIR/aluaca"
 contract; `src/paths.py` is the Python equivalent, shared by the scripts in
 `src/analysis/` and `src/chimeric/`.
 
+### Where inputs are found
+
+You do not normally have to say. An input is looked for by name in the conventional
+places first, then **anywhere under the project root**, so it is enough to drop a file
+somewhere in the repo:
+
+| pipeline | looked for in, in order |
+| --- | --- |
+| `chimeric` | `data/`, then the project root, then anywhere under it |
+| `loci_extraction` | the project root, then `data/`, then anywhere under it |
+| `analysis` | the project root, then `data/`, then anywhere under it |
+
+The search **never leaves the project**. The current directory is deliberately not
+consulted, so running from elsewhere cannot silently pick up a same-named file; `deps/`,
+`.git/`, `__pycache__/` and the STAR indices are skipped. Of several matches the
+shallowest wins, ties broken alphabetically, so the choice never depends on filesystem
+order. To use a file from outside the repo, name it with its flag.
+
+### Overriding an input
+
+Each input has a flag, and an environment variable of the same name in upper snake case:
+
+**`src/chimeric/`** — `bash src/chimeric/run_all.sh --help`
+
+| flag | what |
+| --- | --- |
+| `--source-fasta` / `--source` | the guide catalogue: a path, or `plain` / `merged` |
+| `--fastq` | the reads for one run (otherwise `work/chimeric/<SRR>.fastq.gz`) |
+| `--alu-fasta` | FASTA whose headers name the AluACA records |
+| `--target-fasta` / `--target-tag` | target RNA catalogues, repeatable and paired |
+| `--adapters` | second-round adapter FASTA |
+| `--published` | published hg19 chimeras CSV, for the comparison |
+| `--genome-fa` `--gencode` `--rmsk` `--guide-bed` `--repeat-fa` | references |
+
+**`src/loci_extraction/`** — `bash src/loci_extraction/run_all.sh --help`
+
+| flag | what |
+| --- | --- |
+| `--csv` | napRNAdb Alu/L1 ACA CSV |
+| `--polya-csv` | napRNAdb Alu/L1 polyA-pocket ACA CSV |
+| `--pdf` | Jady et al. supplemental PDF |
+| `--fasta` | deposited-sequence FASTA (written by step 01) |
+| `--snodb` | snoDB catalogue TSV |
+| `--hg38-fa` `--gencode` `--rmsk` | references |
+
+**`src/analysis/`** — `python3 src/analysis/<script>.py --help`
+
+| script | input flags |
+| --- | --- |
+| `collapse_duplicates.py` | `--sno` `--union` `--bed` |
+| `snorna_locate.py` | `--fasta` `--genome` `--bed` |
+| `snorna_overlap.py` | `--a` `--b` |
+
+```bash
+# all equivalent ways to point at one input
+bash src/chimeric/run_chimeras.sh --source-fasta /ref/custom.fa SRR30692552
+SOURCE_FASTA=/ref/custom.fa bash src/chimeric/run_chimeras.sh SRR30692552
+cp /ref/custom.fa data/ && bash src/chimeric/run_chimeras.sh --source-fasta data/custom.fa SRR30692552
+```
+
+A missing input fails in the first second with a message naming the flag that fixes it,
+rather than part-way through a run.
+
 ## Layout
 
 ```

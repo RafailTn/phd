@@ -143,22 +143,51 @@ if [ -z "${PYTHON:-}" ]; then
   else PYTHON="$(command -v python3 || true)"; fi
 fi
 
-# --- inputs -------------------------------------------------------------
-# Looked for at the project root first, then in $PROJ/data, which is the more
-# natural place to drop them on a shared server. Flags override both.
-_cfg_input() {   # _cfg_input <basename>  -> prints the path that exists
-  if [ -e "$PROJ/$1" ]; then echo "$PROJ/$1"
-  elif [ -e "$PROJ/data/$1" ]; then echo "$PROJ/data/$1"
-  else echo "$PROJ/$1"; fi                 # report the root path when missing
+# --- input lookup -------------------------------------------------------
+# An input is looked for at the project root, then in $PROJ/data (the more
+# natural place to drop them on a shared server), then anywhere under $PROJ.
+# The search never leaves the project: the current directory is deliberately
+# not consulted, so running from somewhere else cannot silently pick up a
+# same-named file. Flags override the lookup entirely.
+_cfg_indexed=0
+_cfg_index=
+_cfg_build_index() {
+  [ "$_cfg_indexed" = 1 ] && return 0
+  _cfg_indexed=1
+  # deps/ is a vendored conda environment of ~28k files and the STAR indices are
+  # large; neither holds inputs, so pruning them keeps the walk to hundreds of
+  # entries and stops a stray name in the env from matching. find does not
+  # follow symlinks by default, so the walk cannot escape $PROJ either.
+  _cfg_index=$(find "$PROJ" \
+      \( -name .git -o -name deps -o -name __pycache__ -o -name '*_star_index' \) -prune \
+      -o -type f -print 2>/dev/null)
 }
-PDF="${PDF:-$(_cfg_input Supplemental_material.pdf)}"   # Jady et al. supplemental tables
-CSV="${CSV:-$(_cfg_input napRNA_Alu_L1_ACA.csv)}"       # napRNAdb Alu/L1 ACA loci (hg38)
-FASTA="${FASTA:-$OUT/AluACA_HE855917-HE856264.fasta}"   # produced by step 01
+
+_cfg_input() {   # _cfg_input <basename> <varname> [preferred dir ...]
+  local base=$1 var=$2 d hit
+  shift 2
+  for d in "$@" "$PROJ" "$PROJ/data"; do
+    if [ -e "$d/$base" ]; then printf -v "$var" '%s' "$d/$base"; return 0; fi
+  done
+  _cfg_build_index
+  # Shallowest match wins, ties broken alphabetically, so which file is chosen
+  # never depends on the order the filesystem happened to return.
+  hit=$(printf '%s\n' "$_cfg_index" | awk -v b="$base" '
+          { n = split($0, p, "/"); if (p[n] == b) print n "\t" $0 }' \
+        | sort -k1,1n -k2,2 | head -1 | cut -f2-)
+  # Report the root path when missing, so the error names where it should go.
+  printf -v "$var" '%s' "${hit:-$PROJ/$base}"
+}
+
+# --- inputs -------------------------------------------------------------
+[ -n "${PDF:-}" ] || _cfg_input Supplemental_material.pdf PDF   # Jady et al. supplement
+[ -n "${CSV:-}" ] || _cfg_input napRNA_Alu_L1_ACA.csv CSV       # napRNAdb Alu/L1 ACA (hg38)
+FASTA="${FASTA:-$OUT/AluACA_HE855917-HE856264.fasta}"           # produced by step 01
 # Used by one step each, so they go through _cfg_input like the rest rather than
 # assuming the project root -- both actually live in data/ in this checkout.
-POLYA_CSV="${POLYA_CSV:-$(_cfg_input napRNA_Alu_L1_polyApocketACA.csv)}"  # csv_overlap_check.sh
-SNODB_TSV="${SNODB_TSV:-$(_cfg_input snoDB_All_V2.0.tsv)}"               # step 10
-FASTA_ID_BASE="${FASTA_ID_BASE:-3000}"                                   # step 08
+[ -n "${POLYA_CSV:-}" ] || _cfg_input napRNA_Alu_L1_polyApocketACA.csv POLYA_CSV  # csv_overlap_check.sh
+[ -n "${SNODB_TSV:-}" ] || _cfg_input snoDB_All_V2.0.tsv SNODB_TSV                # step 10
+FASTA_ID_BASE="${FASTA_ID_BASE:-3000}"                                            # step 08
 
 # --- NCBI ---------------------------------------------------------------
 EUTILS="${EUTILS:-https://eutils.ncbi.nlm.nih.gov/entrez/eutils}"
@@ -202,7 +231,7 @@ for _cfg_pair in "supplemental PDF (steps 02):--pdf:$PDF" \
   _cfg_lbl="${_cfg_pair%%:*}"; _cfg_rest2="${_cfg_pair#*:}"
   _cfg_flag="${_cfg_rest2%%:*}"; _cfg_path="${_cfg_rest2#*:}"
   [ -e "$_cfg_path" ] || echo "WARNING missing $_cfg_lbl: $_cfg_path" \
-    "(set it with $_cfg_flag, or put it in \$PROJ or \$PROJ/data)" >&2
+    "(set it with $_cfg_flag, or put it anywhere under \$PROJ)" >&2
 done
 
 [ "$_cfg_missing" -eq 0 ] || {

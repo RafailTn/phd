@@ -260,15 +260,42 @@ if [ "${#_cfg_srrs[@]}" -gt 0 ]; then SRRS="${_cfg_srrs[*]}"; fi
 SRRS="${SRRS:-SRR30692552 SRR30692553}"
 IP="${IP:-${SRRS%% *}}"
 
-# --- inputs -------------------------------------------------------------
-# Looked for in $DATA first, then at the project root, which is where a bare
-# checkout without a data/ directory keeps them. Flags override both.
-_cfg_input() {   # _cfg_input <basename> -> prints the path that exists
-  if [ -e "$DATA/$1" ]; then echo "$DATA/$1"
-  elif [ -e "$PROJ/$1" ]; then echo "$PROJ/$1"
-  else echo "$DATA/$1"; fi          # report the data/ path when missing
+# --- input lookup -------------------------------------------------------
+# An input is looked for in the directories it conventionally lives in, then
+# anywhere under $PROJ. The search never leaves the project: the current
+# directory is deliberately not consulted, so running from somewhere else
+# cannot silently pick up a same-named file. Flags override the lookup entirely.
+_cfg_indexed=0
+_cfg_index=
+_cfg_build_index() {
+  [ "$_cfg_indexed" = 1 ] && return 0
+  _cfg_indexed=1
+  # deps/ is a vendored conda environment of ~28k files and the STAR indices are
+  # large; neither holds inputs, so pruning them keeps the walk to hundreds of
+  # entries and stops a stray name in the env from matching. find does not
+  # follow symlinks by default, so the walk cannot escape $PROJ either.
+  _cfg_index=$(find "$PROJ" \
+      \( -name .git -o -name deps -o -name __pycache__ -o -name '*_star_index' \) -prune \
+      -o -type f -print 2>/dev/null)
 }
 
+_cfg_input() {   # _cfg_input <basename> <varname> [preferred dir ...]
+  local base=$1 var=$2 d hit
+  shift 2
+  for d in "$@" "$DATA" "$PROJ"; do
+    if [ -e "$d/$base" ]; then printf -v "$var" '%s' "$d/$base"; return 0; fi
+  done
+  _cfg_build_index
+  # Shallowest match wins, ties broken alphabetically, so which file is chosen
+  # never depends on the order the filesystem happened to return.
+  hit=$(printf '%s\n' "$_cfg_index" | awk -v b="$base" '
+          { n = split($0, p, "/"); if (p[n] == b) print n "\t" $0 }' \
+        | sort -k1,1n -k2,2 | head -1 | cut -f2-)
+  # Report the conventional path when missing, so the error names where it goes.
+  printf -v "$var" '%s' "${hit:-$DATA/$base}"
+}
+
+# --- inputs -------------------------------------------------------------
 # The guide ("source") catalogue. Keeping the real snoRNAs in alongside the
 # AluACAs is deliberate: bowtie2 scores a read against the whole catalogue at
 # once, so an AluACA call means the AluACA beat every snoRNA, rather than being
@@ -276,20 +303,26 @@ _cfg_input() {   # _cfg_input <basename> -> prints the path that exists
 SOURCE="${SOURCE:-merged}"
 if [ -z "${SOURCE_FASTA:-}" ]; then
   case "$SOURCE" in
-    plain)  SOURCE_FASTA="$(_cfg_input snoRNA.txt.fa)" ;;
-    merged) SOURCE_FASTA="$(_cfg_input AluACA_snoRNA_merged_nr.fasta)" ;;
+    plain)  _cfg_input snoRNA.txt.fa SOURCE_FASTA ;;
+    merged) _cfg_input AluACA_snoRNA_merged_nr.fasta SOURCE_FASTA ;;
     *)      SOURCE_FASTA="$SOURCE" ;;   # an explicit path
   esac
 fi
 
-ADAPTERS="${ADAPTERS:-$REF/se.2.round.adapters.fasta}"
-ALU_FASTA="${ALU_FASTA:-$(_cfg_input AluACA_union_nr.fasta)}"
-PUBLISHED="${PUBLISHED:-$(_cfg_input DKC1_IP.snoRNA.hg19.chimeras.csv)}"
+# These two normally live under ref/ rather than data/, so it is tried first.
+[ -n "${ADAPTERS:-}" ]  || _cfg_input se.2.round.adapters.fasta ADAPTERS "$REF"
+[ -n "${ALU_FASTA:-}" ] || _cfg_input AluACA_union_nr.fasta ALU_FASTA
+[ -n "${PUBLISHED:-}" ] || _cfg_input DKC1_IP.snoRNA.hg19.chimeras.csv PUBLISHED
 
 # Target catalogues the guide arm is mapped against, tags in the same order.
 if [ "${#_cfg_targets[@]}" -gt 0 ]; then TARGET_FASTA="${_cfg_targets[*]}"; fi
 if [ "${#_cfg_tags[@]}" -gt 0 ];    then TARGET_TAGS="${_cfg_tags[*]}"; fi
-TARGET_FASTA="${TARGET_FASTA:-$(_cfg_input rRNA.fa) $(_cfg_input snRNA.fa) $(_cfg_input tRNA.fa)}"
+if [ -z "${TARGET_FASTA:-}" ]; then
+  _cfg_input rRNA.fa  _cfg_t_r
+  _cfg_input snRNA.fa _cfg_t_sn
+  _cfg_input tRNA.fa  _cfg_t_t
+  TARGET_FASTA="$_cfg_t_r $_cfg_t_sn $_cfg_t_t"
+fi
 TARGET_TAGS="${TARGET_TAGS:-rRNA snRNA tRNA}"
 # The tag treated as rRNA when deciding which chimeras are ribosomal.
 TARGET_RRNA_TAG="${TARGET_RRNA_TAG:-rRNA}"
@@ -349,7 +382,7 @@ GUIDE_BED="${GUIDE_BED:-$REF/guide_loci.$SPECIES.bed}"
 
 GENOME_INDEX="${GENOME_INDEX:-$REF/${SPECIES}_star_index}"
 REPEAT_INDEX="${REPEAT_INDEX:-$REF/repbase_star_index}"
-REPEAT_FA="${REPEAT_FA:-$REF/repbase/human_repbase.fa}"
+[ -n "${REPEAT_FA:-}" ] || _cfg_input human_repbase.fa REPEAT_FA "$REF/repbase" "$REF"
 
 # Download endpoints, for fetch_refs.sh.
 GENCODE_URL="${GENCODE_URL:-https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_${GENCODE_RELEASE}}"
