@@ -58,7 +58,8 @@ def load_alu_names(path):
     """
     if not path or not os.path.exists(path):
         sys.exit(f'AluACA FASTA {path!r} not found; it is needed to class guides.')
-    names = {l[1:].strip() for l in open(path) if l.startswith('>')}
+    with open(path) as fh:
+        names = {l[1:].strip() for l in fh if l.startswith('>')}
     if not names:
         sys.exit(f'No FASTA headers in {path}.')
     return names
@@ -172,6 +173,18 @@ def bed_annotate(df, gtag, gtf, source_bed, rmsk, bedtools, workdir):
         type_hits[int(f[3])].add(f[10])
     exon_hits = intersect(exons_bed, '-s')
 
+    # Create the annotation columns up front, as object dtype holding NaN. A
+    # partial .loc assignment into a column that does not exist yet makes pandas
+    # build it as float64 NaN and then write strings or booleans into it, which
+    # is the "Setting an item of incompatible dtype" FutureWarning -- and it
+    # prints the entire value list, which for a real run is tens of thousands of
+    # booleans. Rows outside the genomic arm keep NaN either way, so this only
+    # changes how the column is built, not what ends up in it.
+    for c in ('gene_name', 'gene_type', 'feature',
+              'target_in_source_locus', 'target_in_repeat'):
+        if c not in df.columns:
+            df[c] = pd.Series(float('nan'), index=df.index, dtype=object)
+
     ann = {}
     for i in g['chim_idx']:
         names = sorted(gene_hits.get(i, []))
@@ -276,7 +289,10 @@ def main():
         print(alu['guide_names'].value_counts().head(15).to_string())
         for flag in ('target_in_source_locus', 'target_in_repeat'):
             if flag in alu.columns:
-                n = alu[flag].fillna(False).astype(bool).sum()
+                # .eq rather than .fillna(False).astype(bool): NaN.eq(True) is
+                # already False, and filling an object column then letting astype
+                # downcast it is deprecated in pandas 2.x.
+                n = alu[flag].eq(True).sum()
                 print(f'\nflagged {flag}: {n:,} of {alu.shape[0]:,} AluACA chimeras')
 
 

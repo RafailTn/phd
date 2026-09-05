@@ -65,7 +65,8 @@ def read_counts(outdir, uid):
     n = {}
     cut = os.path.join(outdir, f'{uid}.cut.adapt.log')
     if os.path.exists(cut):
-        rows = [l.split('\t') for l in open(cut) if l.startswith('OK')]
+        with open(cut) as fh:
+            rows = [l.split('\t') for l in fh if l.startswith('OK')]
         if rows:
             n['raw'] = int(rows[0][1])
             n['trimmed'] = int(rows[-1][6])
@@ -74,7 +75,8 @@ def read_counts(outdir, uid):
         p = os.path.join(outdir, fn)
         if not os.path.exists(p):
             continue
-        txt = open(p).read()
+        with open(p) as fh:
+            txt = fh.read()
         def grab(pat):
             m = re.search(pat + r'\s*\|\s*([0-9.]+)', txt)
             return float(m.group(1)) if m else None
@@ -733,7 +735,8 @@ H/ACA guiding requires. That is a sequence calculation this pipeline does not do
 
     # ---- sanity check against the published run ----------------------------
     if os.path.exists(a.published):
-        pub = sum(1 for _ in open(a.published)) - 1
+        with open(a.published) as fh:
+            pub = sum(1 for _ in fh) - 1
         ours = int((ip.target_class == 'hg38').sum())
         o.append('\n## Cross-check against the published hg19 run\n')
         o.append(f'The published output for this same sample '
