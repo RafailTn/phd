@@ -10,7 +10,7 @@ where the 12,686 published-only reads were lost:
   survived repeat+genome masking       kept  12,605   lost      81
   guide hit, target arm extracted      kept  12,595   lost      10
   survived back-map filter             kept  12,505   lost      90
-  -> lost at the genome-mapping step         12,505   (98.6% of the loss)
+  -> reached the genome step                 12,505   (98.6% of the loss)
 
 published-only target-arm length   n= 12,686  median   55 nt   <=25 nt 4.8%
 shared target-arm length           n= 33,124  median   39 nt   <=25 nt 33.6%
