@@ -10,6 +10,7 @@ results/*
 !results/chimeric/
 results/chimeric/*
 !results/chimeric/RESULTS.md
+!results/chimeric/RESULTS.hg19.md
 !results/chimeric/*.vs_published.txt
 
 __pycache__/

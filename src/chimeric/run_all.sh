@@ -174,12 +174,15 @@ step_report () {
          "records for the report to compare against"
     return 0
   fi
-  # RESULTS.md is a single committed deliverable about the headline hg38 merged
-  # run. Any other arm writes its own copy inside the arm directory rather than
-  # overwriting it -- otherwise running two arms would leave RESULTS.md holding
-  # whichever finished last.
+  # The two merged arms are the committed deliverables, one per genome build:
+  # RESULTS.md for hg38 and RESULTS.hg19.md for hg19. Any other arm writes its own
+  # copy inside its arm directory rather than overwriting either -- otherwise
+  # running several arms would leave one report holding whichever finished last.
   local out=$OUT/$ARM/RESULTS.md
-  [ "$ARM" = arm0_hg38_merged ] && out=$OUT/RESULTS.md
+  case "$ARM" in
+    arm0_hg38_merged) out=$OUT/RESULTS.md ;;
+    arm3_hg19_merged) out=$OUT/RESULTS.hg19.md ;;
+  esac
   say "$ARM report"
   "$PYTHON" "$SRC/make_report.py" \
     --arm "$ARM" --resdir "$OUT/$ARM" \

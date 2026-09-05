@@ -26,18 +26,35 @@ bash src/chimeric/run_all.sh --species hg19 --source merged SRR30692552
 The steps are `fastq`, `refs`, `index`, `run`, `annotate`, `compare`, `report`, selectable
 with `--only a,b` or `--skip a,b`.
 
-`report` runs only for the merged-catalogue arms. `RESULTS.md` splits every table by
+`report` runs only for the merged-catalogue arms. The report splits every table by
 AluACA vs snoRNA guide, and the plain `snoRNA.txt.fa` catalogue holds no AluACA records,
 so there would be nothing to compare against; those arms are scored by
-`compare_to_published.py` instead. Only `arm0_hg38_merged` writes the committed
-`results/chimeric/RESULTS.md` — any other arm writes its own copy inside its arm
-directory, so running several arms never leaves the headline report holding whichever
-finished last. Each is also a script you can run on its own —
-`fetch_fastq.sh`, `fetch_refs.sh`, `build_indices.sh`, `run_chimeras.sh`,
-`annotate_chimeras.py`, `compare_to_published.py`, `make_report.py`.
+`compare_to_published.py` instead.
 
-`make_report.py` recomputes every number in `RESULTS.md` from the annotated tables, so
-rerun it after any change rather than editing the report by hand.
+There is one committed report per genome build, so the two can be read side by side:
+
+| arm | writes |
+|---|---|
+| `arm0_hg38_merged` | `results/chimeric/RESULTS.md` |
+| `arm3_hg19_merged` | `results/chimeric/RESULTS.hg19.md` |
+| any other arm | `results/chimeric/<arm>/RESULTS.md` |
+
+Both committed files are tracked; everything else stays out of git. Writing per-arm
+means running several arms never leaves one report holding whichever finished last.
+
+`make_report.py` follows `--gtag` throughout — the title, the genomic column of the
+crosstab, the biotype and mRNA sections and the published cross-check all name the build
+being reported. On an hg19 arm the cross-check additionally drops the genome-build term
+from its list of expected differences, since that arm is on the published build: what is
+left is the catalogue and the masking index.
+
+Each step is also a script you can run on its own — `fetch_fastq.sh`, `fetch_refs.sh`,
+`build_indices.sh`, `run_chimeras.sh`, `annotate_chimeras.py`,
+`compare_to_published.py`, `make_report.py`.
+
+`make_report.py` recomputes every number in the report from the annotated tables --
+including the figures quoted in the interpretation -- so rerun it after any change rather
+than editing the report by hand.
 
 ### Configuration
 
