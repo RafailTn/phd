@@ -48,6 +48,23 @@ cfg_check
 SOURCE_FASTA=$(readlink -f "$SOURCE_FASTA")
 echo "### $SRR | species=$SPECIES${ARM:+ | arm=$ARM} | source=$(basename "$SOURCE_FASTA") ($(grep -c '^>' "$SOURCE_FASTA") records)"
 
+# sno-chimeras.py is a seqflow pipeline: a task re-runs only when its output is
+# missing or older than its input (flow.py, "already up to date"). The STAR index
+# is not a declared input, so re-running into a finished directory with a
+# different --genome-index silently changes nothing and the results look
+# identical. Say so rather than letting a no-op pass for a run.
+_done=$OUTDIR/$SRR.snoRNA.$SPECIES.chimeras.csv
+if [ -f "$_done" ]; then
+  echo "!!! $OUTDIR already holds a finished run ($(basename "$_done"))." >&2
+  echo "!!! seqflow skips tasks whose outputs exist, so this will re-run nothing" >&2
+  echo "!!! and any change of index or reference will NOT take effect." >&2
+  echo "!!! Use --out <fresh dir> (or --outdir), or delete that directory first." >&2
+  if [ -z "${FORCE_RERUN:-}" ]; then
+    echo "!!! Set FORCE_RERUN=1 to proceed anyway." >&2
+    exit 1
+  fi
+fi
+
 # sno-chimeras.py validates its arguments and only then chdir's into --outdir, so a
 # relative FASTQ path passes validation and is dead by the time umi_tools opens it --
 # which it does silently, yielding an empty run rather than an error.
