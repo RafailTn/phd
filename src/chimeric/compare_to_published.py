@@ -118,27 +118,36 @@ def main():
         # A read captured there was still called a chimera -- just with a
         # different target -- so counting it as an alignment failure overstates
         # the disagreement. Split the residual out.
-        elsewhere = set()
-        for tag in [t for t in a.other_tags.split(',') if t]:
-            other = os.path.join(a.outdir, f'{a.uid}.{a.stag}.{tag}.chimeras.csv')
-            if os.path.exists(other):
-                elsewhere |= (remaining & arm_reads(other))
-        unplaced = remaining - elsewhere
         lines.append(f'  {"-> reached the genome step":36s}      {len(remaining):>7,}'
                      f'   ({pct(len(remaining), len(missed))} of the loss)')
-        if elsewhere:
-            lines.append('')
-            lines.append(f'of those {len(remaining):,}, this arm did call a chimera, '
-                         f'against a different target:')
-            for tag in [t for t in a.other_tags.split(',') if t]:
-                other = os.path.join(a.outdir, f'{a.uid}.{a.stag}.{tag}.chimeras.csv')
-                if os.path.exists(other):
-                    n = len(remaining & arm_reads(other))
-                    if n:
-                        lines.append(f'  {"claimed by " + tag:36s}      {n:>7,}'
-                                     f'   ({pct(n, len(missed))} of the loss)')
-            lines.append(f'  {"genuinely unplaced":36s}      {len(unplaced):>7,}'
-                         f'   ({pct(len(unplaced), len(missed))} of the loss)')
+
+        tags = [t for t in a.other_tags.split(',') if t]
+        found, elsewhere, per_tag = [], set(), []
+        for tag in tags:
+            other = os.path.join(a.outdir, f'{a.uid}.{a.stag}.{tag}.chimeras.csv')
+            if os.path.exists(other):
+                found.append(tag)
+                hit = remaining & arm_reads(other)
+                elsewhere |= hit
+                per_tag.append((tag, len(hit)))
+        lines.append('')
+        if not found:
+            # Distinguish "none were claimed" from "the files were not there":
+            # a silent zero would look like evidence when it is not.
+            lines.append(f'of those {len(remaining):,}, target-class competition could not be '
+                         f'checked: no {a.stag}.<tag>.chimeras.csv for {",".join(tags)} '
+                         f'in {a.outdir}')
+        else:
+            lines.append(f'of those {len(remaining):,}, did this arm call the read as a '
+                         f'chimera against a different target?')
+            for tag, n in per_tag:
+                lines.append(f'  {"claimed by " + tag:36s}      {n:>7,}'
+                             f'   ({pct(n, len(missed))} of the loss)')
+            lines.append(f'  {"genuinely unplaced":36s}      {len(remaining - elsewhere):>7,}'
+                         f'   ({pct(len(remaining) - len(elsewhere), len(missed))} of the loss)')
+            missing = [t for t in tags if t not in found]
+            if missing:
+                lines.append(f'  (not checked, no CSV: {",".join(missing)})')
     else:
         lines.append('intermediates not kept (--keep), so the loss cannot be attributed to a stage')
     lines.append('')
