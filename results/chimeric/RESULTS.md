@@ -60,8 +60,8 @@ class-vs-class contrast does not.
 
 **Do not stop at this table.** The pooled AluACA figure averages two populations that
 behave in opposite directions, and the average takes the sign of the larger one. Chimeras
-whose genomic arm lands in a repeat -- the Alu-to-Alu artefact class -- run at 0.48x and
-dominate the pool, while exonic protein-coding targets outside any repeat run at 1.49x
+whose genomic arm lands in a repeat -- the Alu-to-Alu artefact class -- run at 0.49x and
+dominate the pool, while exonic protein-coding targets outside any repeat run at 1.47x
 and are genuinely enriched. See *Stratified enrichment* below, which is the table this
 question actually turns on.
 
@@ -252,27 +252,26 @@ Top AluACA-mRNA pairs (IP, exonic and intronic):
 
 
 **The aggregate AluACA depletion is the Alu-to-Alu background, and it inverts the sign of
-the real signal.** Chimeras whose genomic arm lands in a repeat run at 0.48x. Strip those
+the real signal.** Chimeras whose genomic arm lands in a repeat run at 0.49x. Strip those
 out and restrict to exonic protein-coding targets -- the stratum a guide model actually
-predicts -- and AluACA chimeras are *enriched* at 1.49x with a confidence interval clear
-of 1, over 2,427 IP chimeras. Reporting only the pooled 0.68x would have buried that.
+predicts -- and AluACA chimeras are *enriched* at 1.47x with a confidence interval clear of 1,
+over 2,430 IP chimeras. Reporting only the pooled 0.68x would have buried that.
 
-The same stratification puts snoRNA guides at 14.25x, so AluACA-mRNA pairing is roughly
-tenfold weaker than canonical snoRNA guiding rather than absent. That is the size of
+The same stratification puts snoRNA guides at 14.70x, so AluACA-mRNA pairing is roughly
+10-fold weaker than canonical snoRNA guiding rather than absent. That is the size of
 effect expected if the duplexes are short-lived: Pederiva et al. argue mRNA
 pseudouridylation proceeds "with the aid of guide RNAs containing mismatches toward the
 mRNA to be modified", and a mismatched, catalytically transient duplex is captured by
 proximity ligation far less efficiently than a stable snoRNP-rRNA pairing. A weaker ratio
 is therefore the predicted observation, not evidence against the model.
 
-**This measures trans pairing only.** Of the enriched exonic set, 99.9% pair a guide with
-an mRNA from elsewhere in the genome; just 2 of 2,427 fall within 1 Mb of their own guide
-locus. That is not evidence against cis action, because genome masking removes cis
-geometry by construction -- a guide ligated to its own host pre-mRNA yields a read that
-aligns contiguously, or across a short novel junction, and is dropped before chimera
-calling. The 450 novel-junction reads quantified in the masking section are the only
-window this pipeline leaves onto cis, and testing the co-transcriptional model properly
-would need that stage relaxed or replaced.
+**This measures trans pairing only.** 99.8% of the enriched exonic set pairs a guide
+with an mRNA outside the guide's own locus; only 6 of 2,430 land back on it. That is
+not evidence against cis action, because genome masking removes cis geometry by
+construction -- a guide ligated to its own host pre-mRNA yields a read that aligns
+contiguously, or across a short novel junction, and is dropped before chimera calling.
+Testing the co-transcriptional model properly would need that stage relaxed or replaced;
+this pipeline cannot address it either way.
 
 ## Alu targets, split by orientation
 
@@ -314,20 +313,20 @@ removes irrespective of orientation.
 | snoRNA -> nuclear | 5,617 | 50 | 14.27 | 10.91 - 19.44 |
 
 **This is the most important caveat in the report.** For AluACA guides the artefact floor
-sits at 1.17x with an interval reaching 2.77, and that interval contains the 1.51x measured
+sits at 1.04x with an interval reaching 2.36, and that interval contains the 1.49x measured
 on nuclear exonic mRNA targets. A Fisher exact test on the 2x2 of counts puts the two at
-p = 0.56: **not distinguishable**. The enrichment over *input* is solid; whether it exceeds
+p = 0.33: **not distinguishable**. The enrichment over *input* is solid; whether it exceeds
 the artefact floor is simply not resolved by this data. The AluACA-mRNA result should
 therefore be stated as consistent with a guide model, not as evidence for one.
 
-What chrM does establish is that the floor is not zero. AluACA guides generate 86
-impossible chimeras in this stratum, against 2,341 candidates -- ligation noise is
+What chrM does establish is that the floor is not zero. AluACA guides generate 85
+impossible chimeras in this stratum, against 2,430 candidates -- ligation noise is
 measurably present, not negligible.
 
 Both chrM ratios are badly underpowered and should not be over-read. The snoRNA figure of
-42.71x rests on *zero* input reads: its magnitude is produced entirely by the
+43.48x rests on *zero* input reads: its magnitude is produced entirely by the
 Haldane-Anscombe 0.5 substituted for that zero, its interval runs to infinity, and Fisher
-against the nuclear stratum gives p = 0.41 -- also not distinguishable. It is tempting to
+against the nuclear stratum gives p = 0.40 -- also not distinguishable. It is tempting to
 argue from these numbers that an artefact pairing inherits the enrichment of whichever
 guide it is attached to, since chimeras form during on-bead ligation. That story fits the
 point estimates, but the intervals do not support it and it should not be presented as a
