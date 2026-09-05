@@ -56,8 +56,8 @@ chimeric eCLIP pipeline - configuration flags
   --repeat-fa FILE   RepBase consensus FASTA    [default: $REF/repbase/human_repbase.fa]
   --sparse-d N       STAR --genomeSAsparseD. 1 = dense (~32 GB RAM to build,
                      ~29 GB to align); 2 = halved suffix array, ~17 GB.
-                                                [default: 2]
-  --gen-ram BYTES    STAR --limitGenomeGenerateRAM  [default: 26000000000]
+                                                [default: 1]
+  --gen-ram BYTES    STAR --limitGenomeGenerateRAM  [default: 64000000000]
   --dense            shorthand for --sparse-d 1 --gen-ram 64000000000
   --sparse           shorthand for --sparse-d 2 --gen-ram 26000000000
   --sjdb-overhang N  max read length - 1        [default: 139]
@@ -97,11 +97,13 @@ chimeric eCLIP pipeline - configuration flags
 
 The reproduction-matrix arms (--arm):
 
-  arm0_hg38_merged          hg38  merged  sparse   the workstation run
-  arm0d_hg38_merged_dense   hg38  merged  dense    same, dense, for the residual
+  arm0_hg38_merged          hg38  merged  dense    the headline run
   arm1_hg19_plain           hg19  plain   dense    vs the published 45,810
-  arm2_hg38_plain           hg38  plain   sparse
+  arm2_hg38_plain           hg38  plain   dense    catalogue effect
   arm3_hg19_merged          hg19  merged  dense    build-stability of the AluACAs
+
+All arms are dense. --sparse still works for a RAM-limited machine, but names the
+run <species>_<source>_sparse so it cannot overwrite a dense result.
 
 Environment variables of the same name in upper snake case (PROJ, REF, DATA,
 WORK, OUT, SPECIES, ARM, SOURCE, SOURCE_FASTA, CPUS, SRRS, GENOME_INDEX,
@@ -193,12 +195,17 @@ SRC="$_cfg_dir"
 #   ---------+-----------------------+----------------------
 #   hg38     | arm2                  | arm0 / arm0d
 #   hg19     | arm1  <- reproduction | arm3  <- build-stability
+# Every arm is dense: that is what produced the committed results, and the
+# sparse-vs-dense comparison is settled (see README -- sparse agreed with the
+# published run far less well and added calls that were mostly not signal).
+# arm0d was "arm0 but dense" and is now the same thing as arm0; it is kept as an
+# alias so older commands still land in the right place.
 cfg_arm_spec() {   # cfg_arm_spec <arm> -> "<species> <source> <density>"
   case "$1" in
-    arm0|arm0_hg38_merged)              echo "hg38 merged sparse" ;;
-    arm0d|arm0d_hg38_merged_dense)      echo "hg38 merged dense"  ;;
+    arm0|arm0_hg38_merged|arm0d|arm0d_hg38_merged_dense)
+                                        echo "hg38 merged dense"  ;;
     arm1|arm1_hg19_plain)               echo "hg19 plain  dense"  ;;
-    arm2|arm2_hg38_plain)               echo "hg38 plain  sparse" ;;
+    arm2|arm2_hg38_plain)               echo "hg38 plain  dense"  ;;
     arm3|arm3_hg19_merged)              echo "hg19 merged dense"  ;;
     *) return 1 ;;
   esac
@@ -206,8 +213,8 @@ cfg_arm_spec() {   # cfg_arm_spec <arm> -> "<species> <source> <density>"
 
 cfg_arm_name() {   # cfg_arm_name <arm> -> the canonical long name
   case "$1" in
-    arm0|arm0_hg38_merged)          echo arm0_hg38_merged ;;
-    arm0d|arm0d_hg38_merged_dense)  echo arm0d_hg38_merged_dense ;;
+    arm0|arm0_hg38_merged|arm0d|arm0d_hg38_merged_dense)
+                                    echo arm0_hg38_merged ;;
     arm1|arm1_hg19_plain)           echo arm1_hg19_plain ;;
     arm2|arm2_hg38_plain)           echo arm2_hg38_plain ;;
     arm3|arm3_hg19_merged)          echo arm3_hg19_merged ;;
@@ -238,10 +245,9 @@ fi
 # corresponds to. A combination outside the table gets a descriptive name.
 cfg_arm_for() {   # cfg_arm_for <species> <source> <density> -> arm name
   case "$1 $2 $3" in
-    "hg38 merged sparse") echo arm0_hg38_merged ;;
-    "hg38 merged dense")  echo arm0d_hg38_merged_dense ;;
+    "hg38 merged dense")  echo arm0_hg38_merged ;;
     "hg19 plain  dense"|"hg19 plain dense")   echo arm1_hg19_plain ;;
-    "hg38 plain  sparse"|"hg38 plain sparse") echo arm2_hg38_plain ;;
+    "hg38 plain  dense"|"hg38 plain dense")   echo arm2_hg38_plain ;;
     "hg19 merged dense")  echo arm3_hg19_merged ;;
     *) echo "${1}_${2}_${3}" ;;
   esac
@@ -250,8 +256,11 @@ cfg_arm_for() {   # cfg_arm_for <species> <source> <density> -> arm name
 # --- run parameters -----------------------------------------------------
 SPECIES="${SPECIES:-hg38}"
 CPUS="${CPUS:-$(nproc)}"
-SPARSE_D="${SPARSE_D:-2}"
-GEN_RAM="${GEN_RAM:-26000000000}"
+# Dense by default: it is what produced every committed result, and the named
+# arms all specify it. A RAM-limited machine passes --sparse, which names the run
+# so it cannot be mistaken for, or overwrite, a dense one.
+SPARSE_D="${SPARSE_D:-1}"
+GEN_RAM="${GEN_RAM:-64000000000}"
 # sjdbOverhang = max read length - 1. Reads are 150 nt minus a 10 nt UMI, so 139.
 SJDB_OVERHANG="${SJDB_OVERHANG:-139}"
 

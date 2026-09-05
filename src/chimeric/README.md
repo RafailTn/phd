@@ -75,7 +75,7 @@ The ones worth knowing:
 | `--species` | `hg38` | genome tag; also the suffix of the pipeline's genomic outputs |
 | `--source` | `merged` | guide catalogue: `merged`, `plain`, or a path |
 | `--arm` | derived | sets species, catalogue and index density together |
-| `--sparse-d` | `2` | `1` (or `--dense`) builds a dense index |
+| `--sparse-d` | `1` (dense) | `--sparse` builds a half-size index for a RAM-limited machine |
 | `--cpus` | `nproc` | threads |
 | `--proj` `--ref` `--data` `--work` `--out` | derived from the repo | relocate any part of the layout |
 
@@ -88,7 +88,7 @@ Results always land in `results/chimeric/<arm>/<SRR>/`. The default run is
 
 ### Running on another machine
 
-The hg19 arms want a dense STAR index, which needs about 32 GB to build and 29 GB to
+The arms want a dense STAR index, which needs about 32 GB to build and 29 GB to
 align — more than this 31 GB workstation has. `make_bundle.sh` packs a checkout small
 enough to copy (~4 MB: the code, both guide catalogues, the target RNAs, the adapters and
 the RepBase consensus; the genome and the FASTQs are re-fetched at the other end):
@@ -109,8 +109,8 @@ of it.
 ## Reproducing the published run
 
 The published output for this sample (`data/DKC1_IP.snoRNA.hg19.chimeras.csv`) holds
-45,810 genomic chimeras against our 39,061 on hg38, and only 25,005 read names are
-shared. Three things differ at once, so they are separated with a 2x2:
+45,810 genomic chimeras against our 38,149 on hg38, with 28,085 read names shared.
+Three things differ at once, so they are separated with a 2x2:
 
 |          | plain `snoRNA.txt.fa` (1,951) | merged AluACA+snoRNA (2,701) |
 |----------|-------------------------------|------------------------------|
@@ -128,12 +128,16 @@ python3 src/chimeric/compare_to_published.py \
     --uid SRR30692552 --gtag hg38 --published data/DKC1_IP.snoRNA.hg19.chimeras.csv
 ```
 
-For arm0 that puts **85.3 %** of the 20,805 missing reads at the genome-mapping step —
+For arm0 that puts **84.7 %** of the 17,725 missing reads at the genome-mapping step —
 they survive masking, get a guide hit, and pass the back-map filter, then fail to yield a
 chimera. Masking and catalogue competition account for the other 15 %. That is why the
 build matters enough to test.
 
-The hg19 arms need a dense STAR index, which does not fit in this machine's 31 GB; see
+These figures come from the dense run and are regenerated with it; the committed
+`*.vs_published.txt` files are the source, so re-read them rather than this paragraph
+after any rerun.
+
+Every arm needs a dense STAR index, which does not fit in this machine's 31 GB; see
 [Running on another machine](#running-on-another-machine) for the bundle that runs them
 elsewhere.
 
@@ -238,93 +242,54 @@ The pipeline runs with `--keep`, because its cleanup step deletes the per-target
 | `ref/chimeric/se.2.round.adapters.fasta` | reconstructed adapter tiles (above) |
 | `ref/chimeric/repbase/human_repbase.fa` | 1144 consensus sequences, RepBase `humrep.ref` + `humsub.ref` |
 | `ref/chimeric/repbase_star_index` | STAR index of the above |
-| `ref/chimeric/hg38_star_index` | GRCh38 primary + GENCODE v47, `sjdbOverhang 139` |
+| `ref/chimeric/hg38_star_index` | GRCh38 primary + GENCODE v47, `sjdbOverhang 139`, dense |
 | `ref/chimeric/guide_loci.hg38.bed` | 2533 guide loci from `snoDB_with_AluACA_union.tsv` |
 | `ref/chimeric/rmsk.hg38.bed` | UCSC RepeatMasker, for the Alu-to-Alu flag |
 
-`hg38_star_index` is built with `--genomeSAsparseD 2`. GRCh38 + sjdb does not otherwise
-fit in this machine's 31 GB: a dense index needs ~29.4 GB resident (SA 24.9 + Genome 3.1 +
-SAindex 1.5) against ~26 GB available, which is why a default `genomeGenerate` gets
-OOM-killed here. Sparsity halves the suffix array to 12.5 GB, giving ~17 GB resident.
-`--limitGenomeGenerateRAM` only chunks the SA sort and cannot get peak usage below the
-finished SA, so it is not a substitute.
+The committed results are built on **dense** STAR indices (`--genomeSAsparseD 1`), which
+is now the default and what every named arm specifies. A dense GRCh38 + sjdb index
+needs ~29.4 GB resident (SA 24.9 + Genome 3.1 + SAindex 1.5) to align and more
+than that to build, so it does not fit in this workstation's 31 GB; the arms behind the
+current reports were run on a larger machine (see
+[Running on another machine](#running-on-another-machine)).
 
-**Sparsity is not results-neutral here, despite the manual describing it as a speed
-tradeoff.** Measured on a controlled A/B -- dense and sparse indices of chr1, identical
-in every other parameter, queried with this pipeline's own target arms under its own
-genome-step settings:
+Sparsity remains available as a fallback -- `--sparse` halves the suffix array to 12.5 GB,
+giving ~17 GB resident -- and it is what the earlier results on this workstation used. A
+sparse run is named `<species>_<source>_sparse` rather than an arm name, so it cannot be
+mistaken for, or overwrite, a dense result. `--limitGenomeGenerateRAM` only chunks the SA
+sort and cannot get peak usage below the finished SA, so it is not a substitute.
 
-| | dense (D=1) | sparse (D=2) |
+**What the sparse-to-dense move actually changed.** The same arm (hg38, merged catalogue)
+was run both ways, so the density is the only variable. Scored against the published run
+by read name:
+
+| | sparse (D=2) | dense (D=1) |
 |---|---|---|
-| uniquely mapped | 20,600 | 19,134 |
-| mapped by both | 15,456 | |
-| …same chrom+pos+CIGAR | 14,482 (93.7%) | |
-| …placed differently | 974 (6.3%) | |
-| lost by sparse / gained by sparse | 5,144 | 3,678 |
+| genomic chimeras called | 39,061 | 38,149 |
+| shared with published | 25,005 | 28,085 |
+| …as a share of this arm | 64.0% | **73.6%** |
+| published-only (missed) | 20,805 | 17,725 |
+| this-arm-only | 14,056 | **10,064** |
 
-The instability concentrates in short arms -- 13.7% disagreement at 16-20 nt, 9.6% at
-21-25 nt, ~2% above 40 nt. The mechanism is not that sparse alignments are wrong but that
-this step runs `--outFilterMultimapNmax 1`, so a read is discarded unless it maps to
-exactly one locus; a seed search that finds one more or one fewer near-equal placement
-flips the read between kept and dropped.
+Dense calls slightly *fewer* chimeras (-2.3%) but agrees with the publication far better:
++3,080 shared reads, and this-arm-only calls fall by 28%. Most of what sparsity added was
+not signal. The mechanism is that the genome step runs `--outFilterMultimapNmax 1`, so a
+read is dropped unless it maps to exactly one locus, and a seed search that finds one more
+or one fewer near-equal placement flips the read between kept and dropped -- an effect
+concentrated in short arms.
 
-Two things follow for how the results should be read:
+**The enrichment ratios were unaffected, as predicted.** Both samples used the same index,
+so the bias applied equally and cancelled in the IP-vs-input comparison:
 
-- **IP-vs-input folds are robust.** Both samples use the same index and their target-arm
-  length distributions are nearly identical (median 43 nt each; 22.2% vs 21.0% in the
-  unstable 16-25 nt band), so the bias applies equally and cancels in the ratio.
-- **Absolute counts and individual gene assignments are not.** Expect ~7% uncertainty in
-  totals, and more for snoRNA-guided chimeras than AluACA-guided ones, since snoRNA arms
-  are shorter (median 30 nt, 43.6% in the unstable band) than AluACA arms (median 46 nt,
-  23.1%).
+| guide class | sparse | dense |
+|---|---|---|
+| AluACA | 0.68x (0.65 - 0.71) | 0.68x (0.65 - 0.71) |
+| snoRNA | 12.75x | 12.99x |
+| all | 2.60x | 2.61x |
 
-The chr1-only design inflates these numbers -- a read whose true locus is on another
-chromosome is forced onto a chr1 paralog -- so treat them as an upper bound rather than an
-estimate of the effect on the real hg38 run. Rebuilding dense on a >32 GB machine would
-remove the caveat entirely; that is `arm0d` (`run_all.sh arm0d`, see
-[Running on another machine](#running-on-another-machine)), which measures the same thing
-on real chimera calls genome-wide and supersedes this test once it lands.
-
-<details><summary>Redoing the A/B, if it is ever needed</summary>
-
-`work/chimeric/sparsetest/` held the indices, the query and the two alignments. It was
-deleted: the indices and `chr1.fa` are regenerable, and the query was a byte-for-byte copy
-of a file the run directory still holds. The whole thing rebuilds in about five minutes.
-
-The query is the 156,616 target arms that reached the genome-mapping step -- i.e. what
-survived the back-map filter and did not hit rRNA, snRNA or tRNA. **It only exists inside
-a completed run**, so this cannot be redone if `results/chimeric/arm0_hg38_merged/SRR30692552/` is cleared.
-
-```bash
-source src/chimeric/config.sh          # $PROJ, $GENOME_FA, $OUT and the tools
-cd "$PROJ"
-S=$WORK/sparsetest; mkdir -p $S
-
-cp "$OUT/arm0_hg38_merged/SRR30692552/SRR30692552.snoRNA.RNA.unmap.fasta" $S/query.fasta
-samtools faidx "$GENOME_FA" chr1 > $S/chr1.fa
-
-for D in 1 2; do
-  mkdir -p $S/idx_D$D $S/aln_D$D
-  STAR --runMode genomeGenerate --runThreadN 20 --genomeDir $S/idx_D$D \
-       --genomeFastaFiles $S/chr1.fa --genomeSAindexNbases 13 \
-       --genomeSAsparseD $D --outFileNamePrefix $S/idx_D$D/
-  # These are the pipeline's own genome-step settings, which is what makes the
-  # comparison meaningful -- in particular --outFilterMultimapNmax 1, the filter
-  # the sparsity interacts with.
-  STAR --alignEndsType EndToEnd --genomeDir $S/idx_D$D --genomeLoad NoSharedMemory \
-       --outFileNamePrefix $S/aln_D$D/ \
-       --outFilterMatchNminOverLread 0.66 --outFilterMultimapNmax 1 \
-       --outFilterMultimapScoreRange 1 --outFilterScoreMin 10 \
-       --outFilterScoreMinOverLread 0.66 --outFilterType BySJout \
-       --outReadsUnmapped Fastx --outSAMattributes Standard --outSAMmode Full \
-       --outSAMtype SAM --outSAMunmapped None --outStd Log \
-       --readFilesIn $S/query.fasta --runMode alignReads --runThreadN 20
-done
-```
-
-Then compare the two `Aligned.out.sam`, ignoring secondary alignments (flag `0x100`), on
-`(reference, position, CIGAR)` per read name.
-</details>
+So absolute counts and individual gene assignments moved by 1-2%, while every conclusion
+in the report -- all of which rest on ratios -- is unchanged. Quote counts from the dense
+run; treat per-gene assignments near the detection floor as provisional either way.
 
 The repeat index is built from RepBase human consensus only. The original run used the
 lab's `homo_sapiens_repbase_v2`, which is not public and probably also carried rRNA and a

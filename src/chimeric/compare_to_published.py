@@ -73,6 +73,11 @@ def main():
     p.add_argument('--gtag', default='hg38', help='Genome tag of the arm, default: %(default)s.')
     p.add_argument('--stag', default='snoRNA', help='Source RNA tag, default: %(default)s.')
     p.add_argument('--published', required=True, help='Published hg19 chimeras CSV.')
+    p.add_argument('--other-tags', default='rRNA,snRNA,tRNA',
+                   help='Target classes tried before the genome, comma separated. '
+                        'A read the pipeline assigned to one of these never reached '
+                        'the genome step, so it is reported separately rather than '
+                        'counted as an alignment failure. Default: %(default)s.')
     p.add_argument('--label', default='', help='Name for this arm in the output.')
     p.add_argument('--out', default='', help='Write the summary here as well as to stdout.')
     a = p.parse_args()
@@ -108,8 +113,32 @@ def main():
             kept = remaining & names
             lines.append(f'  {label:36s} kept {len(kept):>7,}   lost {len(remaining) - len(kept):>7,}')
             remaining = kept
-        lines.append(f'  {"-> lost at the genome-mapping step":36s}      {len(remaining):>7,}'
+        # "Reached the genome step" is where the residual used to stop, but the
+        # pipeline tries rRNA/snRNA/tRNA *before* the genome and first hit wins.
+        # A read captured there was still called a chimera -- just with a
+        # different target -- so counting it as an alignment failure overstates
+        # the disagreement. Split the residual out.
+        elsewhere = set()
+        for tag in [t for t in a.other_tags.split(',') if t]:
+            other = os.path.join(a.outdir, f'{a.uid}.{a.stag}.{tag}.chimeras.csv')
+            if os.path.exists(other):
+                elsewhere |= (remaining & arm_reads(other))
+        unplaced = remaining - elsewhere
+        lines.append(f'  {"-> reached the genome step":36s}      {len(remaining):>7,}'
                      f'   ({pct(len(remaining), len(missed))} of the loss)')
+        if elsewhere:
+            lines.append('')
+            lines.append(f'of those {len(remaining):,}, this arm did call a chimera, '
+                         f'against a different target:')
+            for tag in [t for t in a.other_tags.split(',') if t]:
+                other = os.path.join(a.outdir, f'{a.uid}.{a.stag}.{tag}.chimeras.csv')
+                if os.path.exists(other):
+                    n = len(remaining & arm_reads(other))
+                    if n:
+                        lines.append(f'  {"claimed by " + tag:36s}      {n:>7,}'
+                                     f'   ({pct(n, len(missed))} of the loss)')
+            lines.append(f'  {"genuinely unplaced":36s}      {len(unplaced):>7,}'
+                         f'   ({pct(len(unplaced), len(missed))} of the loss)')
     else:
         lines.append('intermediates not kept (--keep), so the loss cannot be attributed to a stage')
     lines.append('')

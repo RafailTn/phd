@@ -3,7 +3,7 @@
 #
 #   bash src/chimeric/run_all.sh                  # the default arm, both samples
 #   bash src/chimeric/run_all.sh arm1 arm3        # two arms, reusing the index
-#   bash src/chimeric/run_all.sh arm0d            # the workstation run again, dense
+#   bash src/chimeric/run_all.sh --sparse arm0    # sparse, for a RAM-limited machine
 #   bash src/chimeric/run_all.sh --species hg19 --source merged SRR30692552
 #   bash src/chimeric/run_all.sh arm3 --only annotate,compare
 #
@@ -25,13 +25,14 @@
 #
 #            | plain snoRNA.txt.fa      | merged AluACA+snoRNA
 #   ---------+--------------------------+--------------------------
-#   hg38     | arm2                     | arm0 (sparse) / arm0d (dense)
+#   hg38     | arm2                     | arm0  <- the headline run
 #   hg19     | arm1  <- reproduction    | arm3  <- build-stability
 #
 # arm1 is the number to judge against the published 45,810 genomic chimeras in
 # DKC1_IP.snoRNA.hg19.chimeras.csv. arm3 says whether the AluACA findings survive
-# a change of build. arm0d re-runs the workstation's own configuration densely
-# and so measures the sparse-vs-dense term every sparse arm carries.
+# a change of build. Every arm is dense; the sparse-vs-dense question is settled
+# and written up in the README. arm0d is accepted as an alias for arm0, which is
+# now dense itself.
 #
 # Every path is settable by flag or environment variable; run --help for the
 # full list.
