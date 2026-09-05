@@ -289,6 +289,22 @@ def main():
     o.append('## IP enrichment by guide class\n')
     N1 = n_ip.get('trimmed') or 1
     N2 = n_ct.get('trimmed') or 1
+    def strat_ratio(cls, fn):
+        """Rate ratio for one guide class restricted to one stratum of the genomic arm.
+
+        Defined here because the summary paragraph below quotes two of these strata
+        before the stratified section computes its table; both now read the same
+        function rather than a number typed in twice.
+        """
+        I = ip[(ip.guide_class == cls) & (ip.target_class == a.gtag)]
+        C = ctrl[(ctrl.guide_class == cls) & (ctrl.target_class == a.gtag)]
+        return rate_ratio(int(fn(I).sum()), int(fn(C).sum()), N1, N2)
+
+    in_repeat = lambda d: d.target_in_repeat
+    exonic_pc = lambda d: (~d.target_in_repeat) & _pc(d) & (d.feature == 'exonic')
+    rep_ratio = strat_ratio('AluACA', in_repeat)[0]
+    exo_ratio = strat_ratio('AluACA', exonic_pc)[0]
+
     rows = {}
     for cls in ('AluACA', 'snoRNA', 'ambiguous', 'all'):
         if cls == 'all':
@@ -329,8 +345,8 @@ class-vs-class contrast does not.
 
 **Do not stop at this table.** The pooled AluACA figure averages two populations that
 behave in opposite directions, and the average takes the sign of the larger one. Chimeras
-whose genomic arm lands in a repeat -- the Alu-to-Alu artefact class -- run at 0.48x and
-dominate the pool, while exonic protein-coding targets outside any repeat run at 1.49x
+whose genomic arm lands in a repeat -- the Alu-to-Alu artefact class -- run at {rep_ratio:.2f}x and
+dominate the pool, while exonic protein-coding targets outside any repeat run at {exo_ratio:.2f}x
 and are genuinely enriched. See *Stratified enrichment* below, which is the table this
 question actually turns on.
 """)
@@ -487,42 +503,64 @@ be resolved guide-by-guide at this input depth.
         ('outside repeat, protein_coding, EXONIC',
          lambda d: (~d.target_in_repeat) & _pc(d) & (d.feature == 'exonic')),
     ]
+    strat = {}
     for cls in ('AluACA', 'snoRNA'):
         I = ip[(ip.guide_class == cls) & (ip.target_class == a.gtag)]
         C = ctrl[(ctrl.guide_class == cls) & (ctrl.target_class == a.gtag)]
         rws = {}
+        strat[cls] = {}
         for lbl, fn in strata:
             x, y = int(fn(I).sum()), int(fn(C).sum())
             pt, lo, hi = rate_ratio(x, y, N1, N2)
             hs = 'inf' if hi == float('inf') else f'{hi:.2f}'
             rws[lbl] = [x, y, round(pt, 2), f'{lo:.2f} - {hs}']
+            # Kept so the paragraph below quotes the table rather than restating
+            # numbers that go stale the moment the pipeline is re-run.
+            strat[cls][lbl] = (x, y, pt, lo, hi)
         o.append(f'**{cls} guides**\n')
         o.append(md_table(pd.DataFrame.from_dict(
             rws, orient='index', columns=['IP', 'input', 'rate ratio', '95% CI']), 'stratum'))
         o.append('')
-    o.append("""
-**The aggregate AluACA depletion is the Alu-to-Alu background, and it inverts the sign of
-the real signal.** Chimeras whose genomic arm lands in a repeat run at 0.48x. Strip those
-out and restrict to exonic protein-coding targets -- the stratum a guide model actually
-predicts -- and AluACA chimeras are *enriched* at 1.49x with a confidence interval clear
-of 1, over 2,427 IP chimeras. Reporting only the pooled 0.68x would have buried that.
+    _EX = 'outside repeat, protein_coding, EXONIC'
+    rep_r = strat['AluACA']['arm inside a repeat'][2]
+    ex_n, _, ex_r, ex_lo, _ = strat['AluACA'][_EX]
+    sno_ex_r = strat['snoRNA'][_EX][2]
+    pooled_alu = rows['AluACA'][4]
+    # "clear of 1" is a claim about the interval, so let the interval make it.
+    ci_clause = ('with a confidence interval clear of 1' if ex_lo > 1
+                 else f'though its interval still reaches below 1 ({ex_lo:.2f})')
+    gap = sno_ex_r / ex_r if ex_r else float('nan')
 
-The same stratification puts snoRNA guides at 14.25x, so AluACA-mRNA pairing is roughly
-tenfold weaker than canonical snoRNA guiding rather than absent. That is the size of
+    # How much of the enriched stratum sits on the guide's own locus. This is the
+    # computable part of the cis question: annotate_chimeras flags a target arm
+    # overlapping its own guide locus on the same strand.
+    ex_ip = ip[(ip.guide_class == 'AluACA') & (ip.target_class == a.gtag) &
+               (~ip.target_in_repeat) & _pc(ip) & (ip.feature == 'exonic')]
+    own = int(ex_ip.get('target_in_source_locus', pd.Series(dtype=object)).eq(True).sum())
+    trans_pct = 100 * (len(ex_ip) - own) / len(ex_ip) if len(ex_ip) else float('nan')
+
+    o.append(f"""
+**The aggregate AluACA depletion is the Alu-to-Alu background, and it inverts the sign of
+the real signal.** Chimeras whose genomic arm lands in a repeat run at {rep_r:.2f}x. Strip those
+out and restrict to exonic protein-coding targets -- the stratum a guide model actually
+predicts -- and AluACA chimeras are *enriched* at {ex_r:.2f}x {ci_clause},
+over {ex_n:,} IP chimeras. Reporting only the pooled {pooled_alu:.2f}x would have buried that.
+
+The same stratification puts snoRNA guides at {sno_ex_r:.2f}x, so AluACA-mRNA pairing is roughly
+{gap:.0f}-fold weaker than canonical snoRNA guiding rather than absent. That is the size of
 effect expected if the duplexes are short-lived: Pederiva et al. argue mRNA
 pseudouridylation proceeds "with the aid of guide RNAs containing mismatches toward the
 mRNA to be modified", and a mismatched, catalytically transient duplex is captured by
 proximity ligation far less efficiently than a stable snoRNP-rRNA pairing. A weaker ratio
 is therefore the predicted observation, not evidence against the model.
 
-**This measures trans pairing only.** Of the enriched exonic set, 99.9% pair a guide with
-an mRNA from elsewhere in the genome; just 2 of 2,427 fall within 1 Mb of their own guide
-locus. That is not evidence against cis action, because genome masking removes cis
-geometry by construction -- a guide ligated to its own host pre-mRNA yields a read that
-aligns contiguously, or across a short novel junction, and is dropped before chimera
-calling. The 450 novel-junction reads quantified in the masking section are the only
-window this pipeline leaves onto cis, and testing the co-transcriptional model properly
-would need that stage relaxed or replaced.
+**This measures trans pairing only.** {trans_pct:.1f}% of the enriched exonic set pairs a guide
+with an mRNA outside the guide's own locus; only {own:,} of {len(ex_ip):,} land back on it. That is
+not evidence against cis action, because genome masking removes cis geometry by
+construction -- a guide ligated to its own host pre-mRNA yields a read that aligns
+contiguously, or across a short novel junction, and is dropped before chimera calling.
+Testing the co-transcriptional model properly would need that stage relaxed or replaced;
+this pipeline cannot address it either way.
 """)
 
     # ---- Alu target orientation ---------------------------------------------
@@ -600,30 +638,48 @@ removes irrespective of orientation.
         m = x.reference_target.astype(str).isin(['chrM', 'MT', 'chrMT'])
         return x[m] if mito else x[~m]
     mrows = {}
+    mit = {}
     for cls in ('AluACA', 'snoRNA'):
         for mito, lbl in ((True, 'chrM (impossible, = artefact)'), (False, 'nuclear')):
             A_, B_ = mstrat(ip, cls, mito), mstrat(ctrl, cls, mito)
             pt, lo, hi = rate_ratio(len(A_), len(B_), N1, N2)
             hs = 'inf' if hi == float('inf') else f'{hi:.2f}'
             mrows[f'{cls} -> {lbl}'] = [len(A_), len(B_), round(pt, 2), f'{lo:.2f} - {hs}']
+            mit[(cls, mito)] = (len(A_), len(B_), pt, lo, hi)
     o.append(md_table(pd.DataFrame.from_dict(
         mrows, orient='index', columns=['IP', 'input', 'rate ratio', '95% CI']), 'stratum'))
-    o.append("""
+    (am_i, am_c, am_r, _, am_hi) = mit[('AluACA', True)]
+    (an_i, an_c, an_r, _, _) = mit[('AluACA', False)]
+    (sm_i, sm_c, sm_r, _, _) = mit[('snoRNA', True)]
+    _, p_alu = fisher_exact([[am_i, am_c], [an_i, an_c]])
+    _, p_sno = fisher_exact([[sm_i, sm_c], [mit[('snoRNA', False)][0],
+                                            mit[('snoRNA', False)][1]]])
+    # Every clause that could flip is derived, so the argument cannot drift out of
+    # step with the counts on a re-run.
+    reach = ('contains' if am_hi >= an_r else 'does not reach')
+    alu_verdict = ('not distinguishable' if p_alu >= 0.05 else 'distinguishable')
+    sno_verdict = ('also not distinguishable' if p_sno >= 0.05 else 'distinguishable')
+    hi_txt = 'infinity' if am_hi == float('inf') else f'{am_hi:.2f}'
+    sno_zero = (' rests on *zero* input reads: its magnitude is produced entirely by the\n'
+                'Haldane-Anscombe 0.5 substituted for that zero, its interval runs to infinity, and'
+                if sm_c == 0 else
+                f' rests on {sm_c:,} input reads, and')
+
+    o.append(f"""
 **This is the most important caveat in the report.** For AluACA guides the artefact floor
-sits at 1.17x with an interval reaching 2.77, and that interval contains the 1.51x measured
+sits at {am_r:.2f}x with an interval reaching {hi_txt}, and that interval {reach} the {an_r:.2f}x measured
 on nuclear exonic mRNA targets. A Fisher exact test on the 2x2 of counts puts the two at
-p = 0.56: **not distinguishable**. The enrichment over *input* is solid; whether it exceeds
+p = {p_alu:.2f}: **{alu_verdict}**. The enrichment over *input* is solid; whether it exceeds
 the artefact floor is simply not resolved by this data. The AluACA-mRNA result should
 therefore be stated as consistent with a guide model, not as evidence for one.
 
-What chrM does establish is that the floor is not zero. AluACA guides generate 86
-impossible chimeras in this stratum, against 2,341 candidates -- ligation noise is
+What chrM does establish is that the floor is not zero. AluACA guides generate {am_i:,}
+impossible chimeras in this stratum, against {am_i + an_i:,} candidates -- ligation noise is
 measurably present, not negligible.
 
 Both chrM ratios are badly underpowered and should not be over-read. The snoRNA figure of
-42.71x rests on *zero* input reads: its magnitude is produced entirely by the
-Haldane-Anscombe 0.5 substituted for that zero, its interval runs to infinity, and Fisher
-against the nuclear stratum gives p = 0.41 -- also not distinguishable. It is tempting to
+{sm_r:.2f}x{sno_zero} Fisher
+against the nuclear stratum gives p = {p_sno:.2f} -- {sno_verdict}. It is tempting to
 argue from these numbers that an artefact pairing inherits the enrichment of whichever
 guide it is attached to, since chimeras form during on-bead ligation. That story fits the
 point estimates, but the intervals do not support it and it should not be presented as a
