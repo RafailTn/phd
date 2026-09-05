@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Run the whole AluACA -> hg38 pipeline end to end.
 #
-#   bash scripts/run_all.sh
-#   bash scripts/run_all.sh --proj /data/aluaca --hg38-dir /ref/hg38 \
+#   bash src/loci_extraction/run_all.sh
+#   bash src/loci_extraction/run_all.sh --proj /data/aluaca --hg38-dir /ref/hg38 \
 #                           --rmsk /ref/hg38_rmsk.tsv.gz --out /results
 #
 # Run with --help for every configurable path.

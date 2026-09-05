@@ -53,6 +53,9 @@ import subprocess
 import sys
 import tempfile
 
+# paths.py lives one level up, shared with the chimeric pipeline; the repo is a
+# collection of scripts rather than an installed package, so put src/ on the path.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from paths import find_input, find_tool, out_path, require
 
 COMP = str.maketrans("ACGTN", "TGCAN")

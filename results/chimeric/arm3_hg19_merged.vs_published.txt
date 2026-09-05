@@ -1,4 +1,4 @@
-# arm3_hg19_merged (sparse) vs published hg19
+# arm3_hg19_merged (hg19 + merged, sparse) vs published hg19
 
 published hg19 chimeras              45,810
 this arm                             42,817

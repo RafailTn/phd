@@ -31,7 +31,6 @@
 
 source "$(dirname "$0")/config.sh"
 
-SNODB_TSV="${SNODB_TSV:-$PROJ/snoDB_All_V2.0.tsv}"
 UNION="$OUT/AluACA_union_nr.bed"
 DEST="$OUT/snoDB_with_AluACA_union.tsv"
 FA="$OUT/snoDB_with_AluACA_union.fasta"

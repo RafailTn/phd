@@ -1,7 +1,7 @@
 # Cross-referencing the union against another catalogue
 
 Three standalone scripts, independent of the `loci_extraction/` pipeline. They
-do not source `config.sh`, but `paths.py` reproduces its lookup rules, so every
+do not source `config.sh`, but `src/paths.py` reproduces its lookup rules, so every
 path has a working default and every path can still be overridden by flag --
 see [Finding inputs](#finding-inputs).
 
@@ -18,7 +18,7 @@ analysis.
 ## `snorna_overlap.py`
 
 ```
-python3 scripts/analysis/snorna_overlap.py \
+python3 src/analysis/snorna_overlap.py \
     --a AluACA_union_nr.fasta --b snoRNA.txt.fa \
     --align --out overlap_report.tsv
 ```
@@ -62,7 +62,7 @@ background anyway.
 ## `snorna_locate.py`
 
 ```
-python3 scripts/analysis/snorna_locate.py \
+python3 src/analysis/snorna_locate.py \
     --fasta snoRNA.txt.fa --prefix SNODB \
     --genome ~/Downloads/hg38/GRCh38.primary_assembly.genome.fa \
     --bed AluACA_union_nr.bed --out work_map/snorna_placed.bed
@@ -92,14 +92,14 @@ Merges `snoRNA.txt.fa` and `AluACA_union_nr.fasta` into one non-redundant
 catalogue, resolving the 15 loci that both files contain.
 
 ```bash
-python3 scripts/analysis/collapse_duplicates.py
+python3 src/analysis/collapse_duplicates.py
 ```
 
 Every path has a default -- see [Finding inputs](#finding-inputs) -- so that
 bare form is usually enough. Override any of it explicitly:
 
 ```bash
-python3 scripts/analysis/collapse_duplicates.py \
+python3 src/analysis/collapse_duplicates.py \
   --sno data/snoRNA.txt.fa --union data/AluACA_union_nr.fasta \
   --out AluACA_snoRNA_merged_nr.fasta \
   --report AluACA_snoRNA_collapse_report.tsv \
@@ -146,7 +146,8 @@ artefact, so collapsing them would lose one.
 
 ## Finding inputs
 
-All three scripts share `paths.py`, which mirrors `loci_extraction/config.sh`
+All three scripts share `src/paths.py` -- shared with the chimeric pipeline, which
+resolves its Python defaults the same way -- and it mirrors `loci_extraction/config.sh`
 so the two halves of the project agree on where things live:
 
 | what | looked for in, in order |
@@ -156,19 +157,19 @@ so the two halves of the project agree on where things live:
 | tools (`bedtools`, `water`) | `--flag`, `$BEDTOOLS`/`$WATER`, `$BIN`, `$PROJ/deps/.pixi/envs/default/bin`, `PATH` |
 
 `$PROJ` comes from the environment when set, otherwise from walking up from
-`scripts/analysis/` until a directory holds `deps/`, or holds one of the
+`src/analysis/` until a directory holds `deps/`, or holds one of the
 project's marker files (`napRNA_Alu_L1_ACA.csv`, `snoRNA.txt.fa`,
 `AluACA_union_nr.fasta`, `Supplemental_material.pdf`) either at its root or in
 its `data/`. Several markers rather than one because a checkout may have the
 raw inputs but not the outputs, or the reverse; anchoring on a single file
-leaves `$PROJ` pointing at `scripts/`.
+leaves `$PROJ` pointing at `src/`.
 
 So on a server with everything under `data/`, all three run bare from
 anywhere:
 
 ```bash
-python3 scripts/analysis/snorna_overlap.py --align
-python3 scripts/analysis/collapse_duplicates.py
+python3 src/analysis/snorna_overlap.py --align
+python3 src/analysis/collapse_duplicates.py
 ```
 
 **The one exception is the genome.** `snorna_locate.py --genome` defaults to
@@ -179,7 +180,7 @@ so that lookup usually fails and you must either export `HG38_FA` (as
 
 ```bash
 HG38_FA=/path/to/GRCh38.primary_assembly.genome.fa \
-  python3 scripts/analysis/snorna_locate.py
+  python3 src/analysis/snorna_locate.py
 ```
 
 A missing input is fatal and names the three directories searched. A missing

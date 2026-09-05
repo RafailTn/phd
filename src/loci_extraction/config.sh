@@ -3,16 +3,16 @@
 # Sourced by every step:  source "$(dirname "$0")/config.sh"
 #
 # Every path is settable three ways, in increasing precedence:
-#   1. built-in default   (project = the directory containing scripts/)
+#   1. built-in default   (project = the directory containing src/)
 #   2. environment variable
 #   3. command-line flag
 #
 # Because this file is sourced, the flags below work on any step script as
 # well as on run_all.sh:
 #
-#   bash scripts/run_all.sh --proj /data/aluaca --hg38-dir /ref/hg38 \
+#   bash src/loci_extraction/run_all.sh --proj /data/aluaca --hg38-dir /ref/hg38 \
 #                           --rmsk /ref/rmsk/hg38_rmsk.tsv.gz --out /results
-#   bash scripts/09_add_repeat_family.sh --rmsk /ref/rmsk/hg38_rmsk.tsv.gz
+#   bash src/loci_extraction/09_add_repeat_family.sh --rmsk /ref/rmsk/hg38_rmsk.tsv.gz
 #
 # Run any script with --help for the full list.
 
@@ -23,7 +23,7 @@ _cfg_usage() {
 AluACA -> hg38 pipeline - configuration flags
 
   --proj DIR         project directory (inputs + default output location)
-                     default: the parent of scripts/
+                     default: the project root
   --out DIR          where deliverables are written        [default: $PROJ]
   --work DIR         scratch directory for intermediates   [default: $OUT/work_map]
 
@@ -36,8 +36,15 @@ AluACA -> hg38 pipeline - configuration flags
                      default 0 = no length filter
 
   --csv FILE         napRNAdb Alu/L1 ACA CSV
+  --polya-csv FILE   napRNAdb Alu/L1 polyA-pocket ACA CSV
+                     required by csv_overlap_check.sh only
   --pdf FILE         Jady et al. supplemental PDF
   --fasta FILE       deposited-sequence FASTA (written by step 01)
+  --snodb FILE       snoDB catalogue TSV
+                     required by step 10 only
+  --fasta-id-base N  first numeric id given to a union FASTA record in step 08
+                     default 3000, above the highest id in snoRNA.txt.fa (2089)
+                     so the two catalogues never collide
 
   --bin DIR          directory containing bedtools + python3
                      default: deps/.pixi/envs/default/bin if present, else PATH
@@ -50,8 +57,9 @@ AluACA -> hg38 pipeline - configuration flags
   -h, --help         show this and exit
 
 Environment variables of the same name in upper snake case (PROJ, OUT, WORK,
-HG38_DIR, HG38_FA, GENCODE, RMSK, MAXLEN, CSV, PDF, FASTA, BIN, BEDTOOLS,
-PYTHON, ACC_FROM, ACC_TO) are honoured as defaults; flags win over them.
+HG38_DIR, HG38_FA, GENCODE, RMSK, MAXLEN, CSV, POLYA_CSV, PDF, FASTA, SNODB_TSV,
+FASTA_ID_BASE, BIN, BEDTOOLS, PYTHON, ACC_FROM, ACC_TO) are honoured as
+defaults; flags win over them.
 USAGE
 }
 
@@ -70,6 +78,9 @@ while [ "$#" -gt 0 ]; do
     --rmsk)      RMSK="$2";      shift 2 ;;
     --max-len)   MAXLEN="$2";    shift 2 ;;
     --csv)       CSV="$2";       shift 2 ;;
+    --polya-csv) POLYA_CSV="$2";  shift 2 ;;
+    --snodb)     SNODB_TSV="$2";  shift 2 ;;
+    --fasta-id-base) FASTA_ID_BASE="$2"; shift 2 ;;
     --pdf)       PDF="$2";       shift 2 ;;
     --fasta)     FASTA="$2";     shift 2 ;;
     --bin)       BIN="$2";       shift 2 ;;
@@ -86,7 +97,7 @@ set -- ${_cfg_rest[@]+"${_cfg_rest[@]}"}
 # --- project layout -----------------------------------------------------
 # The project root is found by walking up from this file until a directory
 # holding the pipeline's inputs turns up, so the scripts can be nested at any
-# depth (scripts/, scripts/loci_extraction/, ...) without breaking.
+# depth (src/, src/loci_extraction/, ...) without breaking.
 _cfg_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 if [ -z "${PROJ:-}" ]; then
   PROJ="$_cfg_dir"
@@ -143,6 +154,11 @@ _cfg_input() {   # _cfg_input <basename>  -> prints the path that exists
 PDF="${PDF:-$(_cfg_input Supplemental_material.pdf)}"   # Jady et al. supplemental tables
 CSV="${CSV:-$(_cfg_input napRNA_Alu_L1_ACA.csv)}"       # napRNAdb Alu/L1 ACA loci (hg38)
 FASTA="${FASTA:-$OUT/AluACA_HE855917-HE856264.fasta}"   # produced by step 01
+# Used by one step each, so they go through _cfg_input like the rest rather than
+# assuming the project root -- both actually live in data/ in this checkout.
+POLYA_CSV="${POLYA_CSV:-$(_cfg_input napRNA_Alu_L1_polyApocketACA.csv)}"  # csv_overlap_check.sh
+SNODB_TSV="${SNODB_TSV:-$(_cfg_input snoDB_All_V2.0.tsv)}"               # step 10
+FASTA_ID_BASE="${FASTA_ID_BASE:-3000}"                                   # step 08
 
 # --- NCBI ---------------------------------------------------------------
 EUTILS="${EUTILS:-https://eutils.ncbi.nlm.nih.gov/entrez/eutils}"
@@ -152,7 +168,8 @@ ACC_TO="${ACC_TO:-HE856264}"
 NCBI_TOOL="${NCBI_TOOL:-claude_code}"
 
 export PROJ OUT WORK HG38_DIR HG38_FA GENCODE RMSK MAXLEN BIN BEDTOOLS PYTHON \
-       PDF CSV FASTA EUTILS ACC_FROM ACC_TO NCBI_TOOL
+       PDF CSV POLYA_CSV FASTA SNODB_TSV FASTA_ID_BASE \
+       EUTILS ACC_FROM ACC_TO NCBI_TOOL
 
 mkdir -p "$WORK" "$OUT"
 

@@ -74,7 +74,6 @@ cut -f1-6 "$W/union.bed7" > "$OUT/AluACA_union_nr.bed"
 # uppercase sequence line -- so the file concatenates with that catalogue.
 # Numbering starts above the highest id there (2089) so the two never collide,
 # and "|" in a joined name becomes "_" because the format is a single token.
-FASTA_ID_BASE="${FASTA_ID_BASE:-3000}"
 "$BEDTOOLS" getfasta -fi "$HG38_FA" -bed "$OUT/AluACA_union_nr.bed" -s -name \
   | awk -v BASE="$FASTA_ID_BASE" '
       /^>/ { if (n) print h "\n" s

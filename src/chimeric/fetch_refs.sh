@@ -1,13 +1,14 @@
 #!/usr/bin/env bash
-# Download the references an arm needs, into $REF/<build>.
+# Download the references a build needs, into $REF/<build>.
 #
-#   bash fetch_refs.sh hg19          # for arm1 / arm3
-#   bash fetch_refs.sh hg38          # for arm0d
-#   bash fetch_refs.sh hg19 hg38     # both
+#   bash src/chimeric/fetch_refs.sh              # the current --species
+#   bash src/chimeric/fetch_refs.sh hg19         # for arm1 / arm3
+#   bash src/chimeric/fetch_refs.sh hg19 hg38    # both
+#   bash src/chimeric/fetch_refs.sh --ref /scratch/ref hg19
 #
 # Per build:
 #   primary assembly FASTA        ~850-900 MB gz -> ~3.1 GB
-#   GENCODE v47 annotation GTF    ~59 MB    (hg19 uses the v47lift37 mapping, so
+#   GENCODE annotation GTF        ~59 MB    (hg19 uses the vNNlift37 mapping, so
 #                                            the annotation release is the same
 #                                            across builds and only the
 #                                            coordinates differ)
@@ -15,17 +16,24 @@
 #
 # and, for hg19 only, the hg38->hg19 chain used to lift the guide-locus BED.
 #
+# Which filenames belong to which build is config.sh's business, not this
+# script's -- build_indices.sh and run_all.sh read the same variables, so the
+# three cannot drift apart.
+#
 # These are the exact files the workstation run used: the served Content-Length
 # for the hg38 GTF (59,075,910) and rmsk.txt.gz (155,633,856) match the local
-# copies byte-for-byte, so an hg38 arm run here differs from the workstation's
-# only in the suffix-array density.
+# copies byte-for-byte, so an hg38 arm run elsewhere differs from the
+# workstation's only in the suffix-array density.
+#
+# Every fetch is skipped if the file is already there, so this is safe to
+# re-run and is the second step of run_all.sh.
 set -euo pipefail
-PROJ=${PROJ:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)}
-REF=${REF:-$PROJ/ref/chimeric}
-[ -d "$PROJ/deps/.pixi/envs/default/bin" ] && export PATH=$PROJ/deps/.pixi/envs/default/bin:$PATH
 
-G=https://ftp.ebi.ac.uk/pub/databases/gencode/Gencode_human/release_47
-U=https://hgdownload.soe.ucsc.edu/goldenPath
+source "$(dirname "${BASH_SOURCE[0]}")/config.sh"
+
+cfg_need "curl" "$(command -v curl || true)" "put curl on PATH"
+cfg_need "pigz" "$(command -v pigz || true)" "--bin, or put pigz on PATH"
+cfg_check
 
 get () {  # get <url> <dest>
   if [ -s "$2" ]; then echo "    have $(basename "$2")"; else
@@ -36,21 +44,23 @@ get () {  # get <url> <dest>
 }
 
 fetch_build () {
-  local build=$1 dir=$REF/$1 fa gtf
+  local build=$1
+  # Re-resolve config.sh's reference table for this build rather than restating
+  # it: SPECIES drives GENOME_FA_NAME, GENCODE_NAME and GENCODE_SUBDIR.
+  local fa gtf sub names
+  names="$(cfg_ref_names "$build")" || {
+    echo "unknown build: $build (expected hg19 | hg38)" >&2; return 1; }
+  read -r fa gtf sub <<<"$names"
+  [ "$sub" = "-" ] && sub=
+
+  local dir=$REF/$build
   mkdir -p "$dir"
-  case "$build" in
-    hg38) fa=GRCh38.primary_assembly.genome.fa
-          get "$G/$fa.gz"                                  "$dir/$fa.gz"
-          get "$G/gencode.v47.primary_assembly.annotation.gtf.gz" \
-              "$dir/gencode.v47.primary_assembly.annotation.gtf.gz" ;;
-    hg19) fa=GRCh37.primary_assembly.genome.fa
-          get "$G/GRCh37_mapping/$fa.gz"                   "$dir/$fa.gz"
-          get "$G/GRCh37_mapping/gencode.v47lift37.annotation.gtf.gz" \
-              "$dir/gencode.v47lift37.annotation.gtf.gz"
-          get "$U/hg38/liftOver/hg38ToHg19.over.chain.gz"  "$dir/hg38ToHg19.over.chain.gz" ;;
-    *) echo "unknown build: $build (expected hg19 | hg38)" >&2; return 1 ;;
-  esac
-  get "$U/$build/database/rmsk.txt.gz" "$dir/rmsk.$build.txt.gz"
+  get "$GENCODE_URL/$sub$fa.gz"  "$dir/$fa.gz"
+  get "$GENCODE_URL/$sub$gtf"    "$dir/$gtf"
+  if [ "$build" = hg19 ]; then
+    get "$UCSC_URL/hg38/liftOver/hg38ToHg19.over.chain.gz" "$dir/hg38ToHg19.over.chain.gz"
+  fi
+  get "$UCSC_URL/$build/database/rmsk.txt.gz" "$dir/rmsk.$build.txt.gz"
 
   if [ ! -s "$dir/$fa" ]; then
     echo "    decompressing genome ..."
@@ -78,4 +88,6 @@ fetch_build () {
   echo "=== $build references ready in $dir ==="
 }
 
-for b in "${@:-hg19}"; do fetch_build "$b"; done
+# Bare positionals name the builds; with none, use the configured --species.
+BUILDS="$*"
+for b in ${BUILDS:-$SPECIES}; do fetch_build "$b"; done

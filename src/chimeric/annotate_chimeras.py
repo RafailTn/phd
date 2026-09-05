@@ -37,6 +37,11 @@ from collections import defaultdict
 
 import pandas as pd
 
+# paths.py lives one level up, shared with the analysis scripts; the repo is a
+# collection of scripts rather than an installed package, so put src/ on the path.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from paths import find_input, find_tool, out_path, proj
+
 
 def _open(path):
     return gzip.open(path, 'rt') if path.endswith('.gz') else open(path)
@@ -194,6 +199,19 @@ def bed_annotate(df, gtag, gtf, source_bed, rmsk, bedtools, workdir):
     return df
 
 
+def default_gtf(gtag):
+    """The annotation fetch_refs.sh downloads, under ref/chimeric/<build>/.
+
+    A bare relative default only works when the cwd happens to be the project
+    root, and an absolute one only works on the machine it was written on; this
+    is derived from the repo instead.
+    """
+    ref = os.environ.get('REF') or os.path.join(proj(), 'ref', 'chimeric')
+    names = {'hg38': 'gencode.v47.primary_assembly.annotation.gtf.gz',
+             'hg19': 'gencode.v47lift37.annotation.gtf.gz'}
+    return os.path.join(ref, gtag, names.get(gtag, names['hg38']))
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -203,14 +221,24 @@ def main():
     p.add_argument('--tags', default='rRNA,snRNA,tRNA,hg38',
                    help='Comma separated target tags, default: %(default)s.')
     p.add_argument('--gtag', default='hg38', help='Genome tag, default: %(default)s.')
-    p.add_argument('--gtf', default='/home/rafail/Downloads/hg38/gencode.v47.primary_assembly.annotation.gtf.gz')
-    p.add_argument('--alu-fasta', default='data/AluACA_union_nr.fasta',
+    p.add_argument('--gtf', default=None,
+                   help='GENCODE annotation GTF, for gene and exon context. '
+                        'Default: $GENCODE, else the one fetch_refs.sh puts in '
+                        'ref/chimeric/<gtag>/.')
+    p.add_argument('--alu-fasta', default=find_input('AluACA_union_nr.fasta'),
                    help='FASTA whose headers name the AluACA records, default: %(default)s.')
-    p.add_argument('--source-bed', default='', help='BED of guide loci, for the false-chimera flag.')
-    p.add_argument('--rmsk', default='', help='BED of repeats, for the Alu-to-Alu flag.')
-    p.add_argument('--bedtools', default='bedtools')
+    p.add_argument('--source-bed', default=os.environ.get('GUIDE_BED', ''),
+                   help='BED of guide loci, for the false-chimera flag.')
+    p.add_argument('--rmsk', default=os.environ.get('RMSK_BED', ''),
+                   help='BED of repeats, for the Alu-to-Alu flag.')
+    p.add_argument('--bedtools', default=None,
+                   help='bedtools executable. Default: $BEDTOOLS, the project pixi env, then PATH.')
     p.add_argument('--out', required=True, help='Output TSV of annotated chimeras.')
     args = p.parse_args()
+    # Resolved here rather than as argparse defaults: the GTF depends on --gtag,
+    # and the tool lookup should not run when an explicit path was given.
+    args.gtf = args.gtf or os.environ.get('GENCODE') or default_gtf(args.gtag)
+    args.bedtools = find_tool('bedtools', args.bedtools)
 
     tags = [t for t in args.tags.split(',') if t]
     print(f'Loading chimeras for {args.uid}:')

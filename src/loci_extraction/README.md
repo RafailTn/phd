@@ -7,7 +7,7 @@ Alu/L1 ACA loci in `napRNA_Alu_L1_ACA.csv` [2,3].
 Run everything with:
 
 ```bash
-bash scripts/run_all.sh
+bash src/loci_extraction/run_all.sh
 ```
 
 ## Outputs (written to `--out`, default the project root)
@@ -165,7 +165,7 @@ tiers - built-in default, then environment variable, then command-line flag -
 so the same checkout runs on a server without editing any script:
 
 ```bash
-bash scripts/run_all.sh \
+bash src/loci_extraction/run_all.sh \
   --proj     /data/aluaca \
   --out      /results/aluaca \
   --work     "$TMPDIR/aluaca" \
@@ -179,15 +179,15 @@ Environment variables work equally well, which suits job schedulers:
 ```bash
 export PROJ=/data/aluaca OUT=/results/aluaca WORK=$TMPDIR/aluaca
 export HG38_DIR=/ref/hg38 RMSK=/ref/hg38/rmsk.tsv.gz
-bash scripts/run_all.sh
+bash src/loci_extraction/run_all.sh
 ```
 
 The flags are parsed by `config.sh`, which every step sources, so they work on
 an individual step as well as on `run_all.sh`:
 
 ```bash
-bash scripts/09_add_repeat_family.sh --out /results/aluaca --rmsk /ref/rmsk.tsv.gz
-bash scripts/run_all.sh --help          # full list
+bash src/loci_extraction/09_add_repeat_family.sh --out /results/aluaca --rmsk /ref/rmsk.tsv.gz
+bash src/loci_extraction/run_all.sh --help          # full list
 ```
 
 Details worth knowing:
@@ -360,4 +360,6 @@ a row falls back to its `snodb_id` and any remaining collision gets the id
 appended (`SNORD66_snoDB1753`).
 
 Input path defaults to `$PROJ/snoDB_All_V2.0.tsv`; override with
-`SNODB_TSV=... bash scripts/loci_extraction/10_replace_aluaca_in_snodb.sh`.
+`bash src/loci_extraction/10_replace_aluaca_in_snodb.sh --snodb ...` (or the
+`SNODB_TSV` environment variable). It defaults to `snoDB_All_V2.0.tsv` looked up
+in `$PROJ` then `$PROJ/data`, like every other input.

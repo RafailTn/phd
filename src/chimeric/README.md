@@ -6,28 +6,80 @@ whose guide arm is an **AluACA**, and to say what the other arm is — rRNA, snR
 or a genomic locus (which is where mRNA targets show up).
 
 ```bash
-bash src/chimeric/build_indices.sh                 # once, ~1 h
-bash src/chimeric/run_chimeras.sh SRR30692552      # the IP
-bash src/chimeric/run_chimeras.sh SRR30692553      # the input control
-python3 src/chimeric/annotate_chimeras.py --outdir results/chimeric/SRR30692552 \
-    --uid SRR30692552 --out results/chimeric/SRR30692552.annotated.tsv \
-    --source-bed ref/chimeric/guide_loci.hg38.bed --rmsk ref/chimeric/rmsk.hg38.bed
-# ... and the same for SRR30692553, then:
-python3 src/chimeric/make_report.py            # writes results/chimeric/RESULTS.md
+bash src/chimeric/run_all.sh          # everything: fetch, build, run, report
 ```
+
+That is the whole procedure. It downloads the two runs, downloads and indexes the
+references, runs the pipeline on the IP and its input control, annotates, compares
+against the published output and regenerates `results/chimeric/RESULTS.md`. Each step is
+skipped when its outputs are already there, so re-running is cheap, and the first run
+takes roughly a day, most of it the STAR index.
+
+`run_all.sh` takes arm names, sample accessions, or neither:
+
+```bash
+bash src/chimeric/run_all.sh arm1 arm3            # two arms of the matrix below
+bash src/chimeric/run_all.sh --only report        # just regenerate RESULTS.md
+bash src/chimeric/run_all.sh --species hg19 --source merged SRR30692552
+```
+
+The steps are `fastq`, `refs`, `index`, `run`, `annotate`, `compare`, `report`, selectable
+with `--only a,b` or `--skip a,b`. Each is also a script you can run on its own —
+`fetch_fastq.sh`, `fetch_refs.sh`, `build_indices.sh`, `run_chimeras.sh`,
+`annotate_chimeras.py`, `compare_to_published.py`, `make_report.py`.
 
 `make_report.py` recomputes every number in `RESULTS.md` from the annotated tables, so
 rerun it after any change rather than editing the report by hand.
 
-`build_indices.sh` and `run_chimeras.sh` are configured by environment variable, so the
-same two scripts drive every arm of the reproduction matrix below:
+### Configuration
 
-| variable | default | meaning |
+Every path is settable three ways, in increasing precedence: a built-in default, an
+environment variable, then a command-line flag. `config.sh` holds the contract and is
+sourced by every step, so a flag works on the driver and on the individual scripts alike:
+
+```bash
+bash src/chimeric/run_all.sh      --species hg19 --cpus 8
+bash src/chimeric/run_chimeras.sh --source-fasta /ref/custom.fa SRR30692552
+SPECIES=hg19 bash src/chimeric/build_indices.sh          # the env form still works
+```
+
+The ones worth knowing:
+
+| flag | default | meaning |
 |---|---|---|
-| `SPECIES` | `hg38` | genome tag; also the suffix of the pipeline's genomic outputs |
-| `GENOME_INDEX` | `ref/chimeric/${SPECIES}_star_index` | STAR index to use |
-| `SOURCE_FASTA` | `data/AluACA_snoRNA_merged_nr.fasta` | the guide catalogue |
-| `SPARSE_D` | `2` | `build_indices.sh` only; `1` builds a dense index |
+| `--species` | `hg38` | genome tag; also the suffix of the pipeline's genomic outputs |
+| `--source` | `merged` | guide catalogue: `merged`, `plain`, or a path |
+| `--arm` | derived | sets species, catalogue and index density together |
+| `--sparse-d` | `2` | `1` (or `--dense`) builds a dense index |
+| `--cpus` | `nproc` | threads |
+| `--proj` `--ref` `--data` `--work` `--out` | derived from the repo | relocate any part of the layout |
+
+`bash src/chimeric/run_all.sh --help` lists all of them, including every reference and
+input path. Nothing is hardcoded to one machine: the project root is found by walking up
+from `config.sh`, so a checkout runs wherever it is put.
+
+Results always land in `results/chimeric/<arm>/<SRR>/`. The default run is
+`arm0_hg38_merged`.
+
+### Running on another machine
+
+The hg19 arms want a dense STAR index, which needs about 32 GB to build and 29 GB to
+align — more than this 31 GB workstation has. `make_bundle.sh` packs a checkout small
+enough to copy (~4 MB: the code, both guide catalogues, the target RNAs, the adapters and
+the RepBase consensus; the genome and the FASTQs are re-fetched at the other end):
+
+```bash
+bash src/chimeric/make_bundle.sh
+scp work/chimeric/chimeric-bundle.tar.gz server:
+# then, there:
+mkdir phd && tar -xzf chimeric-bundle.tar.gz -C phd && cd phd
+pixi install --manifest-path deps/pixi.toml
+bash src/chimeric/run_all.sh arm1 arm3
+```
+
+Budget >= 64 GB RAM and ~70-150 GB of disk. The bundle's file list is derived from
+`config.sh` rather than restated, so an input added to the pipeline cannot be left out
+of it.
 
 ## Reproducing the published run
 
@@ -46,7 +98,8 @@ published chimera the arm missed through that arm's own kept intermediates to sa
 stage dropped it:
 
 ```bash
-python3 src/chimeric/compare_to_published.py --outdir results/chimeric/SRR30692552 \
+python3 src/chimeric/compare_to_published.py \
+    --outdir results/chimeric/arm0_hg38_merged/SRR30692552 \
     --uid SRR30692552 --gtag hg38 --published data/DKC1_IP.snoRNA.hg19.chimeras.csv
 ```
 
@@ -56,7 +109,8 @@ chimera. Masking and catalogue competition account for the other 15 %. That is w
 build matters enough to test.
 
 The hg19 arms need a dense STAR index, which does not fit in this machine's 31 GB; see
-[`server/README.md`](server/README.md) for the bundle that runs them elsewhere.
+[Running on another machine](#running-on-another-machine) for the bundle that runs them
+elsewhere.
 
 ## Which SRA run to use
 
@@ -202,9 +256,9 @@ Two things follow for how the results should be read:
 The chr1-only design inflates these numbers -- a read whose true locus is on another
 chromosome is forced onto a chr1 paralog -- so treat them as an upper bound rather than an
 estimate of the effect on the real hg38 run. Rebuilding dense on a >32 GB machine would
-remove the caveat entirely; that is `arm0d` in
-[`server/README.md`](server/README.md), which measures the same thing on real chimera
-calls genome-wide and supersedes this test once it lands.
+remove the caveat entirely; that is `arm0d` (`run_all.sh arm0d`, see
+[Running on another machine](#running-on-another-machine)), which measures the same thing
+on real chimera calls genome-wide and supersedes this test once it lands.
 
 <details><summary>Redoing the A/B, if it is ever needed</summary>
 
@@ -214,15 +268,15 @@ of a file the run directory still holds. The whole thing rebuilds in about five 
 
 The query is the 156,616 target arms that reached the genome-mapping step -- i.e. what
 survived the back-map filter and did not hit rRNA, snRNA or tRNA. **It only exists inside
-a completed run**, so this cannot be redone if `results/chimeric/SRR30692552/` is cleared.
+a completed run**, so this cannot be redone if `results/chimeric/arm0_hg38_merged/SRR30692552/` is cleared.
 
 ```bash
-cd /home/rafail/Downloads/phd
-export PATH=$PWD/deps/.pixi/envs/default/bin:$PATH
-S=work/chimeric/sparsetest; mkdir -p $S
+source src/chimeric/config.sh          # $PROJ, $GENOME_FA, $OUT and the tools
+cd "$PROJ"
+S=$WORK/sparsetest; mkdir -p $S
 
-cp results/chimeric/SRR30692552/SRR30692552.snoRNA.RNA.unmap.fasta $S/query.fasta
-samtools faidx /home/rafail/Downloads/hg38/GRCh38.primary_assembly.genome.fa chr1 > $S/chr1.fa
+cp "$OUT/arm0_hg38_merged/SRR30692552/SRR30692552.snoRNA.RNA.unmap.fasta" $S/query.fasta
+samtools faidx "$GENOME_FA" chr1 > $S/chr1.fa
 
 for D in 1 2; do
   mkdir -p $S/idx_D$D $S/aln_D$D

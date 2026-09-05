@@ -28,8 +28,10 @@ import urllib.parse
 import urllib.request
 
 WORK = os.environ["WORK"]
-EUTILS = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils"
-TOOL = "claude_code"
+# config.sh exports both; hardcoding them here meant --acc-from and friends
+# reached every step except this one.
+EUTILS = os.environ.get("EUTILS", "https://eutils.ncbi.nlm.nih.gov/entrez/eutils")
+TOOL = os.environ.get("NCBI_TOOL", "claude_code")
 
 # Symbol buried in prose rather than in the symbol field.
 MANUAL_DESC = {

@@ -21,6 +21,11 @@ import sys
 import pandas as pd
 from scipy.stats import beta, fisher_exact
 
+# paths.py lives one level up, shared with the analysis scripts; the repo is a
+# collection of scripts rather than an installed package, so put src/ on the path.
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from paths import find_input, find_tool, proj
+
 # Enrichment is reported as a rate ratio (IP rate / input rate) with an exact 95%
 # confidence interval, and a guide only counts as enriched if the *lower* bound clears
 # this factor. Judging on the point estimate alone credits guides whose apparent
@@ -201,18 +206,41 @@ def alu_orientation(ip, ctrl, gtag, rmsk, bedtools, workdir, N1, N2):
 
 
 def main():
+    # Every path default is resolved against the project root rather than the
+    # current directory, so this runs from anywhere.
+    results = os.environ.get('OUT') or os.path.join(proj(), 'results', 'chimeric')
+    ref = os.environ.get('REF') or os.path.join(proj(), 'ref', 'chimeric')
+
     p = argparse.ArgumentParser(description=__doc__)
     p.add_argument('--ip', default='SRR30692552')
     p.add_argument('--input', dest='inp', default='SRR30692553')
-    p.add_argument('--resdir', default='results/chimeric')
-    p.add_argument('--published', default='data/DKC1_IP.snoRNA.hg19.chimeras.csv')
-    p.add_argument('--rmsk', default='ref/chimeric/rmsk.hg38.bed',
-                   help='RepeatMasker BED, for the Alu orientation analysis.')
-    p.add_argument('--bedtools', default='bedtools')
+    p.add_argument('--arm', default=os.environ.get('ARM', 'arm0_hg38_merged'),
+                   help='Arm whose results to report on; picks --resdir under '
+                        'the results directory. Default: %(default)s.')
+    p.add_argument('--resdir', default=None,
+                   help='Results directory for the arm. Default: <results>/<arm>.')
+    p.add_argument('--published', default=find_input('DKC1_IP.snoRNA.hg19.chimeras.csv'))
+    p.add_argument('--rmsk', default=None,
+                   help='RepeatMasker BED, for the Alu orientation analysis. '
+                        'Default: $RMSK_BED, else ref/chimeric/rmsk.<gtag>.bed.')
+    p.add_argument('--bedtools', default=None,
+                   help='bedtools executable. Default: $BEDTOOLS, the project '
+                        'pixi env, then PATH.')
     p.add_argument('--gtag', default='hg38',
                    help='Genome target tag, as used by annotate_chimeras.py.')
-    p.add_argument('--out', default='results/chimeric/RESULTS.md')
+    p.add_argument('--out', default=os.path.join(results, 'RESULTS.md'),
+                   help='Where to write the report. Default: %(default)s.')
     a = p.parse_args()
+
+    # Resolved after parsing: --resdir follows --arm, and --rmsk follows --gtag.
+    if a.resdir is None:
+        a.resdir = os.path.join(results, a.arm)
+    if a.rmsk is None:
+        a.rmsk = os.environ.get('RMSK_BED') or os.path.join(ref, f'rmsk.{a.gtag}.bed')
+    a.bedtools = find_tool('bedtools', a.bedtools)
+    # Paths quoted in the report are relative to the project root: this document
+    # is committed, so an absolute path would pin it to one machine.
+    reldir = os.path.relpath(a.resdir, proj())
 
     ip = load(os.path.join(a.resdir, f'{a.ip}.annotated.tsv'))
     ctrl = load(os.path.join(a.resdir, f'{a.inp}.annotated.tsv'))
@@ -621,7 +649,8 @@ experiment this result needs next.
         path = os.path.join(a.resdir, fname)
         t.to_csv(path, sep='\t')
         o.append(f'### {label}\n')
-        o.append(f'{len(t):,} in total; full list in `{path}`. Top {topn} by IP count:\n')
+        o.append(f'{len(t):,} in total; full list in '
+                 f'`{os.path.join(reldir, fname)}`. Top {topn} by IP count:\n')
         o.append(md_table(t.head(topn), ' / '.join(keys) if isinstance(keys, list) else keys))
         o.append('')
         return t
@@ -710,13 +739,13 @@ H/ACA guiding requires. That is a sequence calculation this pipeline does not do
                  'divergence is downstream of read handling.\n')
 
     o.append('\n## Files\n')
-    o.append(f'- `{a.resdir}/{a.ip}.annotated.tsv` — one row per IP chimera, all columns\n'
-             f'- `{a.resdir}/{a.inp}.annotated.tsv` — same for the input control\n'
-             f'- `{a.resdir}/<uid>/<uid>.snoRNA.<target>.chimeras.csv` — per-target, '
+    o.append(f'- `{reldir}/{a.ip}.annotated.tsv` — one row per IP chimera, all columns\n'
+             f'- `{reldir}/{a.inp}.annotated.tsv` — same for the input control\n'
+             f'- `{reldir}/<uid>/<uid>.snoRNA.<target>.chimeras.csv` — per-target, '
              'pipeline-native\n'
-             f'- `{a.resdir}/<uid>/<uid>.snorna.chimeras.pipeline.sh` — every command run, '
+             f'- `{reldir}/<uid>/<uid>.snorna.chimeras.pipeline.sh` — every command run, '
              'with literal arguments\n'
-             f'- `{a.resdir}/<uid>/map.metric.and.log` — per-stage mapping metrics\n')
+             f'- `{reldir}/<uid>/map.metric.and.log` — per-stage mapping metrics\n')
 
     os.makedirs(os.path.dirname(a.out), exist_ok=True)
     with open(a.out, 'w') as f:

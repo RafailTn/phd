@@ -15,8 +15,8 @@
 
 source "$(dirname "$0")/config.sh"
 
-A="$PROJ/napRNA_Alu_L1_ACA.csv"
-P="$PROJ/napRNA_Alu_L1_polyApocketACA.csv"
+A="$CSV"
+P="$POLYA_CSV"
 W="$WORK/csvcheck"; mkdir -p "$W"
 
 echo "=== structure ==="

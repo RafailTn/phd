@@ -1,2 +1,6 @@
 #!/usr/bin/env bash
-exec "/home/rafail/Downloads/phd/deps/.pixi/envs/default/bin/python" "/home/rafail/Downloads/phd/src/chimeric/scripts/parse_individual_chimeras.py" "$@"
+# Generated wrapper: sno-chimeras.py invokes its helper scripts as bare command
+# names, and config.sh puts this directory on PATH. Self-locating so a checkout
+# works at any path -- these used to hardcode one workstation's absolute paths.
+_d=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
+exec "${PYTHON:-python3}" "$_d/../scripts/parse_individual_chimeras.py" "$@"

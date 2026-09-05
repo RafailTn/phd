@@ -343,7 +343,7 @@ Every target below is drawn from the enriched stratum only -- exonic, protein-co
 
 ### By target gene
 
-1,688 in total; full list in `results/chimeric/SRR30692552.AluACA_mRNA_targets_by_gene.tsv`. Top 30 by IP count:
+1,688 in total; full list in `results/chimeric/arm0_hg38_merged/SRR30692552.AluACA_mRNA_targets_by_gene.tsv`. Top 30 by IP count:
 
 | gene_name | IP | input | rate ratio | CI low | CI high |
 |---|---|---|---|---|---|
@@ -380,7 +380,7 @@ Every target below is drawn from the enriched stratum only -- exonic, protein-co
 
 ### By guide-target pair
 
-2,099 in total; full list in `results/chimeric/SRR30692552.AluACA_mRNA_targets_by_pair.tsv`. Top 30 by IP count:
+2,099 in total; full list in `results/chimeric/arm0_hg38_merged/SRR30692552.AluACA_mRNA_targets_by_pair.tsv`. Top 30 by IP count:
 
 | guide_names / gene_name | IP | input | rate ratio | CI low | CI high |
 |---|---|---|---|---|---|
@@ -491,9 +491,9 @@ Exact agreement is not expected: different genome build, a source catalogue with
 
 ## Files
 
-- `results/chimeric/SRR30692552.annotated.tsv` — one row per IP chimera, all columns
-- `results/chimeric/SRR30692553.annotated.tsv` — same for the input control
-- `results/chimeric/<uid>/<uid>.snoRNA.<target>.chimeras.csv` — per-target, pipeline-native
-- `results/chimeric/<uid>/<uid>.snorna.chimeras.pipeline.sh` — every command run, with literal arguments
-- `results/chimeric/<uid>/map.metric.and.log` — per-stage mapping metrics
+- `results/chimeric/arm0_hg38_merged/SRR30692552.annotated.tsv` — one row per IP chimera, all columns
+- `results/chimeric/arm0_hg38_merged/SRR30692553.annotated.tsv` — same for the input control
+- `results/chimeric/arm0_hg38_merged/<uid>/<uid>.snoRNA.<target>.chimeras.csv` — per-target, pipeline-native
+- `results/chimeric/arm0_hg38_merged/<uid>/<uid>.snorna.chimeras.pipeline.sh` — every command run, with literal arguments
+- `results/chimeric/arm0_hg38_merged/<uid>/map.metric.and.log` — per-stage mapping metrics
 

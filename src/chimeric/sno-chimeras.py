@@ -105,20 +105,19 @@ else:
     logger.error('The number of target RNA FASTA files does not equal to the number of target RNA tags.')
     sys.exit(1)
 
-GENOMES = {
-    'hg19': '/storage/vannostrand/genomes/hg19/star_2.4.0j_encode',
-    'hg19chr19': '/storage/vannostrand/genomes/hg19/chr19/star_2.4.0j_chr19_index',
-    'hg38': '/storage/vannostrand/genomes/hg38/star_2.4.0j_index',
-    'mm10': '/storage/vannostrand/genomes/mm10/star_2_4_0i_gencode15_sjdb'
-}
-if args.genome_star_index:
-    GENOMES[args.species] = args.genome_star_index
-REPEATS = {
-    'hg19': '/storage/vannostrand/genomes/repbase/species_specific/homo_sapiens_repbase_v2',
-    'hg38': '/storage/vannostrand/genomes/repbase/species_specific/homo_sapiens_repbase_v2',
-    'hg19chr19': '/storage/vannostrand/genomes/hg19/chr19/star_2.4.0j_hg113seqs_repbase_index',
-    'mm10': '/storage/vannostrand/genomes/repbase/species_specific/mus_musculus_repbase_v2'
-}
+# Upstream defaulted these to indices on the van Nostrand lab cluster. Those
+# paths exist on no machine here, so a missing --genome_star_index used to fail
+# with someone else's absolute path; require the flags instead.
+GENOMES, REPEATS = {}, {}
+if not args.genome_star_index:
+    logger.error('No STAR genome index: pass --genome_star_index '
+                 '(run_chimeras.sh does, from --genome-index).')
+    sys.exit(1)
+if not args.repeat_star_index:
+    logger.error('No STAR repeat index: pass --repeat_star_index '
+                 '(run_chimeras.sh does, from --repeat-index).')
+    sys.exit(1)
+GENOMES[args.species] = args.genome_star_index
 # CLIPPER_RNA_SPECIES = {
 #     'hg19': 'hg19.rRNA.45S',
 #     'hg19chr19': 'hg19.rRNA.45S',
@@ -126,8 +125,7 @@ REPEATS = {
 #     'mm10': 'mm10.rRNA.5S.45S'
 # }
 # setattr(args, 'clipper_rna_species', args.clipper_rna_species or CLIPPER_RNA_SPECIES[args.species])
-if args.repeat_star_index:
-    REPEATS[args.species] = args.repeat_star_index
+REPEATS[args.species] = args.repeat_star_index
 if args.target_rRNA_tag not in args.target_rna_tag:
     logger.error(f'Target rRNA tag "{args.target_rRNA_tag}" not found in target rna tag {args.target_rna_tag}.')
     sys.exit(1)
