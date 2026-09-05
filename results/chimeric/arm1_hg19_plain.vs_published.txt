@@ -1,0 +1,16 @@
+# arm1_hg19_plain (sparse) vs published hg19
+
+published hg19 chimeras              45,810
+this arm                             36,419
+shared read names                    29,592   (64.6% of published, 81.3% of this arm)
+published only                       16,218
+this arm only                         6,827
+
+where the 16,218 published-only reads were lost:
+  survived repeat+genome masking       kept  15,648   lost     570
+  guide hit, target arm extracted      kept  15,638   lost      10
+  survived back-map filter             kept  15,554   lost      84
+  -> lost at the genome-mapping step         15,554   (95.9% of the loss)
+
+published-only target-arm length   n= 16,218  median   49 nt   <=25 nt 17.4%
+shared target-arm length           n= 29,592  median   42 nt   <=25 nt 30.2%
