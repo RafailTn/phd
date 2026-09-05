@@ -128,9 +128,9 @@ while [ "$#" -gt 0 ]; do
     --data)           DATA="$2";           shift 2 ;;
     --work)           WORK="$2";           shift 2 ;;
     --out)            OUT="$2";            shift 2 ;;
-    --species)        SPECIES="$2";        shift 2 ;;
+    --species)        SPECIES="$2"; _flag_species=1; shift 2 ;;
     --arm)            ARM="$2";            shift 2 ;;
-    --source)         SOURCE="$2";         shift 2 ;;
+    --source)         SOURCE="$2";  _flag_source=1;  shift 2 ;;
     --source-fasta)   SOURCE_FASTA="$2";   shift 2 ;;
     --cpus)           CPUS="$2";           shift 2 ;;
     --srr)            _cfg_srrs+=("$2");   shift 2 ;;
@@ -140,10 +140,10 @@ while [ "$#" -gt 0 ]; do
     --genome-index)   GENOME_INDEX="$2";   shift 2 ;;
     --repeat-index)   REPEAT_INDEX="$2";   shift 2 ;;
     --repeat-fa)      REPEAT_FA="$2";      shift 2 ;;
-    --sparse-d)       SPARSE_D="$2";       shift 2 ;;
+    --sparse-d)       SPARSE_D="$2"; _flag_density=1; shift 2 ;;
     --gen-ram)        GEN_RAM="$2";        shift 2 ;;
-    --dense)          SPARSE_D=1; GEN_RAM=${GEN_RAM:-64000000000}; shift ;;
-    --sparse)         SPARSE_D=2; GEN_RAM=${GEN_RAM:-26000000000}; shift ;;
+    --dense)          SPARSE_D=1; GEN_RAM=${GEN_RAM:-64000000000}; _flag_density=1; shift ;;
+    --sparse)         SPARSE_D=2; GEN_RAM=${GEN_RAM:-26000000000}; _flag_density=1; shift ;;
     --sjdb-overhang)  SJDB_OVERHANG="$2";  shift 2 ;;
     --hg38-dir)       HG38_DIR="$2";       shift 2 ;;
     --genome-fa)      GENOME_FA="$2";      shift 2 ;;
@@ -230,12 +230,19 @@ if [ -n "${ARM:-}" ]; then
     echo "expected one of: arm0 arm0d arm1 arm2 arm3 (or their long names)" >&2
     exit 1; }
   read -r _arm_species _arm_source _arm_density <<<"$_cfg_spec"
-  SPECIES="${SPECIES:-$_arm_species}"
-  SOURCE="${SOURCE:-$_arm_source}"
-  if [ "$_arm_density" = dense ]; then
-    SPARSE_D="${SPARSE_D:-1}"; GEN_RAM="${GEN_RAM:-64000000000}"
-  else
-    SPARSE_D="${SPARSE_D:-2}"; GEN_RAM="${GEN_RAM:-26000000000}"
+  # --arm is a flag, so it outranks an inherited environment variable and only
+  # yields to a more specific flag on the same command line. Without this,
+  # sourcing config.sh in a shell exports SOURCE/SPECIES and every later
+  # --arm silently keeps the old values -- the arm name and the catalogue then
+  # disagree, which is invisible until the results are wrong.
+  [ -n "${_flag_species:-}" ] || SPECIES="$_arm_species"
+  [ -n "${_flag_source:-}" ]  || SOURCE="$_arm_source"
+  if [ -z "${_flag_density:-}" ]; then
+    if [ "$_arm_density" = dense ]; then
+      SPARSE_D=1; GEN_RAM="${GEN_RAM:-64000000000}"
+    else
+      SPARSE_D=2; GEN_RAM="${GEN_RAM:-26000000000}"
+    fi
   fi
   ARM="$(cfg_arm_name "$ARM")"
 fi
