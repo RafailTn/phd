@@ -91,8 +91,9 @@ def main():
                 continue
             pub[r['read_name']] = dict(seq=r['sequence'], t0=s, t1=e, g0=gs, g1=ge)
 
-    ours = csv_names(os.path.join(a.outdir, f'{a.uid}.{a.stag}.{a.gtag}.chimeras.csv'))
-    missed = set(pub) - ours
+    ours_named = csv_names(os.path.join(a.outdir, f'{a.uid}.{a.stag}.{a.gtag}.chimeras.csv'))
+    missed = set(pub) - ours_named
+    shared = set(pub) & ours_named
 
     arms_path = os.path.join(a.outdir, f'{a.uid}.mask.map.to.{a.stag}.true.target.fasta')
     raw = read_fasta(arms_path)
@@ -103,61 +104,73 @@ def main():
         base, off = split_offset(header)
         arms[base] = (seq, off)
 
-    # Only reads we actually handed to the genome step can be diagnosed here.
-    subject = [n for n in missed if n in arms]
+    def profile(names):
+        """How our extracted arm relates to the region the publication aligned.
 
-    same, diff, shorter, longer = [], [], [], []
-    for n in subject:
-        our_seq = arms[n][0]
-        # The published target arm, reconstructed from its own read coordinates.
-        their_seq = pub[n]['seq'][pub[n]['t0']:pub[n]['t1']]
-        if our_seq == their_seq:
-            same.append(n)
-        else:
-            diff.append(n)
-            if len(our_seq) < len(their_seq):
-                shorter.append(n)
-            elif len(our_seq) > len(their_seq):
-                longer.append(n)
-
-    L = []
-    L.append(f'# why {len(subject):,} unplaced published chimeras failed  ({a.outdir})')
-    L.append('')
-    L.append(f'{"published chimeras":38s} {len(pub):>8,}')
-    L.append(f'{"not called by this arm":38s} {len(missed):>8,}')
-    L.append(f'{"...with a target arm we can inspect":38s} {len(subject):>8,}')
-    L.append('')
-    L.append('did we hand STAR the same sequence the publication placed?')
-    L.append(f'  {"identical arm -> STAR/index difference":38s} {len(same):>8,}   '
-             f'({pct(len(same), len(subject))})')
-    L.append(f'  {"different arm -> split-point difference":38s} {len(diff):>8,}   '
-             f'({pct(len(diff), len(subject))})')
-    if diff:
-        L.append(f'     {"ours shorter than theirs":35s} {len(shorter):>8,}')
-        L.append(f'     {"ours longer than theirs":35s} {len(longer):>8,}')
-        ol = [len(arms[n][0]) for n in diff]
-        tl = [len(pub[n]['seq'][pub[n]['t0']:pub[n]['t1']]) for n in diff]
-        L.append(f'     {"our arm length, median":35s} {median(ol):>8.0f} nt')
-        L.append(f'     {"their arm length, median":35s} {median(tl):>8.0f} nt')
-        # An arm this short cannot survive --outFilterMultimapNmax 1 in a 3 Gb genome.
-        tiny = sum(1 for x in ol if x < 25)
-        L.append(f'     {"our arm < 25 nt (unmappable)":35s} {tiny:>8,}   ({pct(tiny, len(diff))})')
-    if same:
-        sl = [len(arms[n][0]) for n in same]
-        L.append(f'  {"identical-arm length, median":38s} {median(sl):>8.0f} nt')
-
-    if diff and a.examples:
-        L.append('')
-        L.append(f'examples (first {a.examples}):')
-        for n in sorted(diff)[:a.examples]:
+        Run over BOTH groups on purpose: a discrepancy among the unplaced reads
+        only means something if the reads that placed fine do not show it too.
+        """
+        st = dict(n=0, exact=0, extends=0, other=0, dlen=[], dstart=[])
+        for n in names:
+            if n not in arms:
+                continue
             our_seq, off = arms[n]
             d = pub[n]
-            L.append(f'  {n}')
-            L.append(f'    read {len(d["seq"]):>3} nt | published guide {d["g0"]}-{d["g1"]}'
-                     f' target {d["t0"]}-{d["t1"]} ({d["t1"] - d["t0"]} nt)')
-            L.append(f'    ours: offset {off} length {len(our_seq)}')
-            L.append(f'      theirs {d["seq"][d["t0"]:d["t1"]][:60]}')
-            L.append(f'      ours   {our_seq[:60]}')
+            theirs = d['seq'][d['t0']:d['t1']]
+            st['n'] += 1
+            st['dlen'].append(len(our_seq) - len(theirs))
+            if off is not None:
+                st['dstart'].append(off - d['t0'])
+            if our_seq == theirs:
+                st['exact'] += 1
+            elif theirs and our_seq.endswith(theirs):
+                st['extends'] += 1      # same 3' end, extra bases on the 5' side
+            else:
+                st['other'] += 1
+        return st
+
+    m, sh = profile(missed), profile(shared)
+
+    L = []
+    L.append(f'# our target arm vs the region the publication aligned  ({a.outdir})')
+    L.append('')
+    L.append(f'{"published chimeras":38s} {len(pub):>8,}')
+    L.append(f'{"not called by this arm (missed)":38s} {len(missed):>8,}')
+    L.append(f'{"called by this arm (shared)":38s} {len(shared):>8,}')
+    L.append('')
+    L.append(f'{"":38s} {"missed":>10} {"shared":>10}')
+    L.append(f'{"arms available to compare":38s} {m["n"]:>10,} {sh["n"]:>10,}')
+    L.append(f'{"our arm == their aligned region":38s} {pct(m["exact"], m["n"]):>10} {pct(sh["exact"], sh["n"]):>10}')
+    L.append(f'{"our arm extends it at the 5 prime":38s} {pct(m["extends"], m["n"]):>10} {pct(sh["extends"], sh["n"]):>10}')
+    L.append(f'{"genuinely different sequence":38s} {pct(m["other"], m["n"]):>10} {pct(sh["other"], sh["n"]):>10}')
+    for key, lbl in (('dlen', 'length difference, median'),
+                     ('dstart', 'start offset difference, median')):
+        mv = f'{median(m[key]):.0f}' if m[key] else 'n/a'
+        sv = f'{median(sh[key]):.0f}' if sh[key] else 'n/a'
+        L.append(f'{lbl:38s} {mv:>10} {sv:>10}')
+    L.append('')
+    if m['n'] and sh['n']:
+        if abs(m['exact'] / m['n'] - sh['exact'] / sh['n']) < 0.05:
+            L.append('The two groups look alike, so how the arm is cut is NOT what separates')
+            L.append('placed from unplaced. The difference is in the alignment itself:')
+            L.append('index content or STAR parameters.')
+        else:
+            L.append('The groups differ, so the split point is doing the separating.')
+            L.append('Look upstream at the bowtie2 guide assignment, not at STAR.')
+
+    if a.examples:
+        for lbl, names in (('missed', missed), ('shared', shared)):
+            L.append('')
+            L.append(f'examples, {lbl} (first {a.examples}):')
+            for n in sorted(x for x in names if x in arms)[:a.examples]:
+                our_seq, off = arms[n]
+                d = pub[n]
+                theirs = d['seq'][d['t0']:d['t1']]
+                L.append(f'  {n}')
+                L.append(f'    read {len(d["seq"]):>3} nt | their target read {d["t0"]}-{d["t1"]}'
+                         f' | our arm offset {off} len {len(our_seq)}')
+                L.append(f'      theirs {theirs[:58]}')
+                L.append(f'      ours   {our_seq[:58]}')
 
     text = '\n'.join(L)
     print(text)
