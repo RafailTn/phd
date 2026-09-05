@@ -1,16 +1,16 @@
-# arm3_hg19_merged (hg19 + merged, sparse) vs published hg19
+# arm3_hg19_merged (hg19 + merged, dense) vs published hg19
 
 published hg19 chimeras              45,810
-this arm                             42,817
-shared read names                    27,033   (59.0% of published, 63.1% of this arm)
-published only                       18,777
-this arm only                        15,784
+this arm                             41,629
+shared read names                    30,065   (65.6% of published, 72.2% of this arm)
+published only                       15,745
+this arm only                        11,564
 
-where the 18,777 published-only reads were lost:
-  survived repeat+genome masking       kept  18,207   lost     570
-  guide hit, target arm extracted      kept  16,563   lost   1,644
-  survived back-map filter             kept  15,762   lost     801
-  -> lost at the genome-mapping step         15,762   (83.9% of the loss)
+where the 15,745 published-only reads were lost:
+  survived repeat+genome masking       kept  15,664   lost      81
+  guide hit, target arm extracted      kept  13,895   lost   1,769
+  survived back-map filter             kept  13,077   lost     818
+  -> lost at the genome-mapping step         13,077   (83.1% of the loss)
 
-published-only target-arm length   n= 18,777  median   49 nt   <=25 nt 17.0%
-shared target-arm length           n= 27,033  median   41 nt   <=25 nt 31.7%
+published-only target-arm length   n= 15,745  median   53 nt   <=25 nt 6.9%
+shared target-arm length           n= 30,065  median   38 nt   <=25 nt 35.5%
