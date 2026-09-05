@@ -1,16 +1,16 @@
-# arm2: hg38 + plain snoRNA.txt.fa (sparse) vs published hg19
+# arm2_hg38_plain (hg38 + plain, dense) vs published hg19
 
 published hg19 chimeras              45,810
-this arm                             32,710
-shared read names                    27,551   (60.1% of published, 84.2% of this arm)
-published only                       18,259
-this arm only                         5,159
+this arm                             31,860
+shared read names                    31,140   (68.0% of published, 97.7% of this arm)
+published only                       14,670
+this arm only                           720
 
-where the 18,259 published-only reads were lost:
-  survived repeat+genome masking       kept  17,641   lost     618
-  guide hit, target arm extracted      kept  17,631   lost      10
-  survived back-map filter             kept  17,532   lost      99
-  -> lost at the genome-mapping step         17,532   (96.0% of the loss)
+where the 14,670 published-only reads were lost:
+  survived repeat+genome masking       kept  14,541   lost     129
+  guide hit, target arm extracted      kept  14,531   lost      10
+  survived back-map filter             kept  14,440   lost      91
+  -> lost at the genome-mapping step         14,440   (98.4% of the loss)
 
-published-only target-arm length   n= 18,259  median   51 nt   <=25 nt 16.1%
-shared target-arm length           n= 27,551  median   40 nt   <=25 nt 32.0%
+published-only target-arm length   n= 14,670  median   56 nt   <=25 nt 5.0%
+shared target-arm length           n= 31,140  median   37 nt   <=25 nt 35.4%
