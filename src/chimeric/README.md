@@ -24,7 +24,15 @@ bash src/chimeric/run_all.sh --species hg19 --source merged SRR30692552
 ```
 
 The steps are `fastq`, `refs`, `index`, `run`, `annotate`, `compare`, `report`, selectable
-with `--only a,b` or `--skip a,b`. Each is also a script you can run on its own —
+with `--only a,b` or `--skip a,b`.
+
+`report` runs only for the merged-catalogue arms. `RESULTS.md` splits every table by
+AluACA vs snoRNA guide, and the plain `snoRNA.txt.fa` catalogue holds no AluACA records,
+so there would be nothing to compare against; those arms are scored by
+`compare_to_published.py` instead. Only `arm0_hg38_merged` writes the committed
+`results/chimeric/RESULTS.md` — any other arm writes its own copy inside its arm
+directory, so running several arms never leaves the headline report holding whichever
+finished last. Each is also a script you can run on its own —
 `fetch_fastq.sh`, `fetch_refs.sh`, `build_indices.sh`, `run_chimeras.sh`,
 `annotate_chimeras.py`, `compare_to_published.py`, `make_report.py`.
 

@@ -547,7 +547,16 @@ would need that stage relaxed or replaced.
             rows, orient='index', columns=['IP', 'input', 'rate ratio', '95% CI']), 'stratum'))
         aa, as_ = ori[('AluACA', 'antisense', 'ip')], ori[('AluACA', 'sense', 'ip')]
         sa, ss = ori[('snoRNA', 'antisense', 'ip')], ori[('snoRNA', 'sense', 'ip')]
+    if ori and not (as_ and ss):
+        o.append(
+            f'The orientation composition is not computed for this arm: it needs both '
+            f'sense strata to be non-empty, and this run has {as_:,} sense-Alu AluACA '
+            f'targets and {ss:,} for snoRNA guides. A catalogue with no AluACA records '
+            f'-- the plain `snoRNA.txt.fa` arms -- always lands here.\n')
+
+    if ori and as_ and ss:
         od, pv = fisher_exact([[aa, as_], [sa, ss]])
+
         # the enriched stratum's ratio, computed rather than restated
         def _ex(d):
             return d[(d.guide_class == 'AluACA') & (d.target_class == a.gtag) &

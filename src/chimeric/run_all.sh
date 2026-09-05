@@ -165,13 +165,29 @@ step_report () {
     echo "[report] skipped: needs the IP and its input control, got ${SAMPLES[*]}"
     return 0
   fi
+  # The report is written about AluACA guides throughout -- it splits every table
+  # by AluACA vs snoRNA. A plain snoRNA.txt.fa catalogue contains no AluACA
+  # records, so there is nothing for it to report on. The upstream driver never
+  # ran it for those arms either.
+  if [ "$SOURCE" = plain ]; then
+    echo "[report] skipped: $ARM uses the plain catalogue, which has no AluACA" \
+         "records for the report to compare against"
+    return 0
+  fi
+  # RESULTS.md is a single committed deliverable about the headline hg38 merged
+  # run. Any other arm writes its own copy inside the arm directory rather than
+  # overwriting it -- otherwise running two arms would leave RESULTS.md holding
+  # whichever finished last.
+  local out=$OUT/$ARM/RESULTS.md
+  [ "$ARM" = arm0_hg38_merged ] && out=$OUT/RESULTS.md
   say "$ARM report"
   "$PYTHON" "$SRC/make_report.py" \
     --arm "$ARM" --resdir "$OUT/$ARM" \
     --ip "${SAMPLES[0]}" --input "${SAMPLES[1]}" \
     --published "$PUBLISHED" --rmsk "$RMSK_BED" \
     --bedtools "$BEDTOOLS" --gtag "$SPECIES" \
-    --out "$OUT/RESULTS.md"
+    --out "$out"
+  echo "[report] wrote $out"
 }
 
 # --- drive ------------------------------------------------------------------
