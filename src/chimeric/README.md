@@ -212,8 +212,10 @@ alignments per read from 7.4 to 9.4 — the Alu redundancy does not blow up `bow
 
 ## Changes to the upstream code
 
-`sno-chimeras.py` and `scripts/` are vendored verbatim except for these, all marked in
-`git log`:
+Verified against upstream `VanNostrandLab/snoRNA-chimeric`: 7 of the 9 helper scripts in
+`scripts/` are byte-identical, and `sno-chimeras.py` differs only by the items below. The
+changes predate the vendoring commit, so they are not separable in `git log` -- diff
+against the upstream repository to reproduce this list.
 
 1. **`convert_sam_to_bam` crashed on `--source_rna_bed`** — `str.replace()` was called
    with cmder keyword arguments, and it then indexed an undefined `true_bam`. Fixed, so
@@ -225,6 +227,18 @@ alignments per read from 7.4 to 9.4 — the Alu redundancy does not blow up `bow
 3. **Hard-coded lab paths** for the adapter FASTAs now resolve under `$CHIMERIC_REF_DIR`,
    and the emitted run-log no longer sources a cluster-only venv.
 4. `logger.error` in the strategy else-branch referenced an undefined `strategy`.
+5. **`--outSAMattributes All` -> `Standard`** at the genome-mapping step. That step writes
+   SAM, and from STAR 2.5 `All` pulls in the BAM-only `ch` tag, which aborts the run.
+   Alignment and filtering are unaffected -- only which optional tags are emitted -- and
+   the downstream scripts read `XA`, `YN` and `AS` only, all of which `Standard` includes.
+6. **The lab-cluster `GENOMES`/`REPEATS` dictionaries were removed.** Upstream defaulted
+   `--species` to STAR indices under `/storage/vannostrand/`, so omitting
+   `--genome_star_index` failed with a path from someone else's machine. Both indices are
+   now required arguments; `run_chimeras.sh` always passes them, so no run changes.
+
+None of these alter which reads align. Items 1 and 2 are upstream bugs that abort the run
+rather than change its output, 3 and 6 are path portability, 4 is an undefined name in an
+error branch, and 5 is SAM tags only. The pipeline logic is faithful to upstream.
 
 Two console scripts the pipeline calls come from the lab's unpublished `iToolBox` and are
 reimplemented in `scripts/`: `fastq_to_fasta` (note it takes two bare positional
