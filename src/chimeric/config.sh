@@ -415,6 +415,8 @@ fi
 # Prefer the project's pixi env when it exists; otherwise fall back to PATH so
 # the pipeline runs under a module system, conda env or plain container.
 BIN="${BIN:-$PROJ/deps/.pixi/envs/default/bin}"
+# Absolute before it reaches PATH: the entry has to survive sno-chimeras.py's chdir.
+case "$BIN" in /*) ;; *) BIN="$PWD/$BIN" ;; esac
 [ -d "$BIN" ] && case ":$PATH:" in *":$BIN:"*) ;; *) PATH="$BIN:$PATH" ;; esac
 # The bin/ wrappers are how sno-chimeras.py reaches its helper scripts: it
 # invokes them as bare command names.
@@ -439,6 +441,36 @@ CHIMERIC_REF_DIR="${CHIMERIC_REF_DIR:-$REF}"
 OUTDIR="${OUTDIR:-}"
 FASTQ="${FASTQ:-}"
 SOURCE_BED="${SOURCE_BED:-}"
+
+# --- absolute paths -----------------------------------------------------
+# sno-chimeras.py validates its arguments and only then chdir's into --outdir,
+# so a relative path handed to it is dead by the time a tool opens it. STAR says
+#   could not open genome file ref/chimeric/hg19_chr25_star_index//genomeParameters.txt
+# and nothing points at the cwd as the reason. The defaults never hit this
+# because $PROJ is absolute, so it surfaces only on a path given as a flag --
+# which is precisely the case the flags exist for. run_chimeras.sh did this for
+# FASTQ and OUTDIR alone; every path variable needs it.
+#
+# Values are split on whitespace because TARGET_FASTA holds a list. Paths with
+# spaces in them were already unsupported -- run_chimeras.sh passes
+# $TARGET_FASTA unquoted -- so this narrows nothing.
+_cfg_abs() {   # _cfg_abs <varname> ...
+  local v cur out part
+  for v in "$@"; do
+    eval "cur=\${$v:-}"
+    [ -n "$cur" ] || continue
+    out=
+    for part in $cur; do
+      case "$part" in /*) ;; *) part="$PWD/$part" ;; esac
+      out="${out:+$out }$part"
+    done
+    printf -v "$v" '%s' "$out"
+  done
+}
+_cfg_abs PROJ REF DATA WORK OUT HG38_DIR REF_SPECIES_DIR CHIMERIC_REF_DIR \
+         GENOME_INDEX REPEAT_INDEX REPEAT_FA GENOME_FA GENCODE RMSK_BED \
+         GUIDE_BED ADAPTERS TARGET_FASTA ALU_FASTA PUBLISHED SOURCE_FASTA \
+         SOURCE_BED OUTDIR FASTQ
 
 export PROJ SRC REF DATA WORK OUT SPECIES ARM SOURCE SOURCE_FASTA CPUS SRRS IP \
        GENOME_INDEX REPEAT_INDEX REPEAT_FA SPARSE_D GEN_RAM SJDB_OVERHANG \
