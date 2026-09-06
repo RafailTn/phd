@@ -101,19 +101,25 @@ def write_subset(records, wanted, path):
     return seen
 
 
-def run_star(star, index, fasta, prefix, cpus, nmax):
+def run_star(star, index, fasta, prefix, cpus, nmax, score_range):
     """The pipeline's genome step (sno-chimeras.py:405-418) with two changes:
     --outFilterMultimapNmax opened from 1 to `nmax`, and NH/HI added to the SAM
     attributes so the count of loci survives into the output. Everything else --
     EndToEnd, the 0.66 thresholds, BySJout -- is held fixed, or the run would
-    not be measuring the same decision the pipeline makes."""
+    not be measuring the same decision the pipeline makes.
+
+    `score_range` is --outFilterMultimapScoreRange, 1 in the pipeline. At 1 an
+    alignment two points worse than the best is not reported at all, so a read
+    matching the rDNA scaffold GL000220.1 can hide a real chromosomal alignment
+    that would become the best one once the scaffold is gone. Widening it says
+    whether the alignment exists."""
     os.makedirs(prefix, exist_ok=True)
     cmd = [star, '--alignEndsType', 'EndToEnd', '--genomeDir', index,
            '--genomeLoad', 'NoSharedMemory',
            '--outFileNamePrefix', f'{prefix}/',
            '--outFilterMatchNminOverLread', '0.66',
            '--outFilterMultimapNmax', str(nmax),
-           '--outFilterMultimapScoreRange', '1',
+           '--outFilterMultimapScoreRange', str(score_range),
            '--outFilterScoreMin', '10',
            '--outFilterScoreMinOverLread', '0.66',
            '--outFilterType', 'BySJout',
@@ -170,6 +176,7 @@ def profile(label, names, hits, loci, check_locus):
     nh_bucket = Counter()
     unmapped = 0
     with_scaffold = 0
+    with_main = 0
     at_published = 0
     for n in sorted(names):
         al = hits.get(n)
@@ -182,6 +189,8 @@ def profile(label, names, hits, loci, check_locus):
                   else '11-20'] += 1
         if any(not MAIN.match(a[0]) for a in al):
             with_scaffold += 1
+        if any(MAIN.match(a[0]) for a in al):
+            with_main += 1
         if check_locus and any(overlaps(a[0], a[1], a[2], loci.get(n)) for a in al):
             at_published += 1
 
@@ -196,6 +205,8 @@ def profile(label, names, hits, loci, check_locus):
         print(f'  of the {mapped:,} that mapped at all:')
         print(f'    at least one hit off the 25 main chromosomes '
               f'{with_scaffold:>7,}  {100.0 * with_scaffold / mapped:5.1f}%')
+        print(f'    at least one hit ON a main chromosome        '
+              f'{with_main:>7,}  {100.0 * with_main / mapped:5.1f}%')
         if check_locus:
             print(f'    published locus among the hits              '
                   f'{at_published:>7,}  {100.0 * at_published / mapped:5.1f}%')
@@ -212,6 +223,10 @@ def main():
     p.add_argument('--published', default='', help='Published hg19 chimeras CSV.')
     p.add_argument('--work', default='', help='Where to put the probe fastas and STAR output.')
     p.add_argument('--nmax', type=int, default=20, help='--outFilterMultimapNmax, default: %(default)s.')
+    p.add_argument('--score-range', type=int, default=1,
+                   help='--outFilterMultimapScoreRange, default: %(default)s (the '
+                        'pipeline value). Widen it to reveal alignments the rDNA '
+                        'scaffold outscores.')
     p.add_argument('--cpus', type=int, default=int(os.environ.get('CPUS') or os.cpu_count() or 4))
     p.add_argument('--star', default='', help='STAR executable.')
     a = p.parse_args()
@@ -254,7 +269,8 @@ def main():
         tag = 'missed' if 'MISSED' in label else 'shared'
         fasta = os.path.join(work, f'{tag}.fasta')
         hit_names = write_subset(records, names, fasta)
-        sam = run_star(star, index, fasta, os.path.join(work, tag), a.cpus, a.nmax)
+        sam = run_star(star, index, fasta, os.path.join(work, tag), a.cpus,
+                       a.nmax, a.score_range)
         profile(label, hit_names, parse_sam(sam), loci, check_locus)
 
     print(f'\nSTAR output kept under {work}')
