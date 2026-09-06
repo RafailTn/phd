@@ -1,0 +1,22 @@
+# arm0_hg38_merged (hg38 + merged, dense) vs published hg19
+
+published hg19 chimeras              45,810
+this arm                             38,334
+shared read names                    28,211   (61.6% of published, 73.6% of this arm)
+published only                       17,599
+this arm only                        10,123
+
+where the 17,599 published-only reads were lost:
+  survived repeat+genome masking       kept  17,486   lost     113
+  guide hit, target arm extracted      kept  15,724   lost   1,762
+  survived back-map filter             kept  14,902   lost     822
+  -> reached the genome step                 14,902   (84.7% of the loss)
+
+of those 14,902, did this arm call the read as a chimera against a different target?
+  claimed by rRNA                                38   (0.2% of the loss)
+  claimed by snRNA                                0   (0.0% of the loss)
+  claimed by tRNA                                 1   (0.0% of the loss)
+  genuinely unplaced                         14,863   (84.5% of the loss)
+
+published-only target-arm length   n= 17,599  median   54 nt   <=25 nt 6.8%
+shared target-arm length           n= 28,211  median   36 nt   <=25 nt 37.4%
