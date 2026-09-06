@@ -7,10 +7,10 @@ psi-vault/
 # generated write-up. Note the directory itself must not be excluded, or the
 # negation below cannot re-include anything inside it.
 results/*
-!results/chimeric/
-results/chimeric/*
-!results/chimeric/RESULTS.md
-!results/chimeric/RESULTS.hg19.md
-!results/chimeric/*.vs_published.txt
+!results/*/
+results/*/*
+!results/*/RESULTS.md
+!results/*/RESULTS.hg19.md
+!results/*/*.vs_published.txt
 
 __pycache__/
