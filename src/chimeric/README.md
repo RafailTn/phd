@@ -141,6 +141,65 @@ Every arm needs a dense STAR index, which does not fit in this machine's 31 GB; 
 [Running on another machine](#running-on-another-machine) for the bundle that runs them
 elsewhere.
 
+## Unplaced contigs cost 27 % of the calls, and hg38 cannot get them back
+
+The genome-step loss above has a single cause, and it is the reference, not the reads.
+
+`probe_multimapping.py` re-maps the missed target arms against the same index with the
+multimap filter opened, and reports per read how many loci it found and where:
+
+```bash
+python3 src/chimeric/probe_multimapping.py \
+    --outdir results/chimeric/arm1_hg19_plain/SRR30692552 \
+    --uid SRR30692552 --gtag hg19 --work work/probe_arm1 --nmax 20
+```
+
+On the hg19 arm built against the full GENCODE primary assembly (194 references), 96.4 %
+of the missed reads were 2-3-locus multimappers and **99.3 % had a hit off the main
+chromosomes**, against 3.1 % for the shared reads that both runs call — a 32-fold
+enrichment. One contig took 24,037 of ~32,000 alignments: **`GL000220.1`**, the 161 kb
+unplaced scaffold carrying a 45S rDNA unit. Under the pipeline's
+`--outFilterMultimapNmax 1` every read whose target arm lands in rDNA is discarded as
+multimapping, because the same repeat is represented both there and on chr21.
+
+Removing it is deduplication, not deletion: GRCh37's real rDNA arrays sit on the
+acrocentric p-arms, which GRCh37 does not model at all, so `GL000220.1` and the chr21
+copy are two representations of one locus. Rebuilding the hg19 index from the 25 main
+references (`chr1-22`, `chrX`, `chrY`, `chrM`) takes arm1 from 72 % to **99.3 %**
+agreement with the publication and arm3 from 65.6 % to **92.4 %** — about 12,000 reads
+each. The cost is the ~6.6 % of recovered reads that become unique at a locus other than
+the published one.
+
+**The same fix does nothing on hg38, for a structural reason.** GRCh38 *does* model the
+acrocentric short arms, so the rDNA repeat sits on chr13/14/15/21/22 — main chromosomes,
+which no index-composition change can drop. The probe on arm2 against a 25-reference hg38
+index is unambiguous: of 14,147 missed reads that mapped, **0.0 % have any hit off the
+main chromosomes and 100 % have one on them**, with 76.7 % at 4-10 loci (hg19 put the same
+class at 2-3). Dropping scaffolds recovers 35 reads, 0.2 %. The `*.vs_published.txt`
+length lines show the same thing from the other side: on hg38 the missed arms are the
+*long* ones (median 56 nt, 5 % under 25 nt) while the surviving arms skew short — the
+signature of sequence with many high-identity copies, not of reads that are hard to place.
+
+Two consequences worth stating plainly:
+
+- The published 45,810 is **hg19-specific**. Rerunning the pipeline unchanged on GRCh38
+  yields ~68 % of the calls, and no index build recovers the rest. A better assembly is
+  what makes these reads unmappable under `--outFilterMultimapNmax 1`; the parameter and
+  the assembly are incompatible for this read class.
+- The loss is concentrated in **snoRNA-guided chimeras whose target is rRNA** — the
+  assay's own positive control. Recovering it moved snoRNA IP chimeras +21.7 % against
+  AluACA's +4.9 %.
+
+None of this moves the biology. Across that 12,000-read swing the enrichment ratios are
+unchanged within their intervals: AluACA 0.69x -> 0.72x, snoRNA 13.77x -> 13.24x, the
+Alu-to-Alu repeat class 0.49x -> 0.55x, and the exonic non-repeat class 1.43x -> 1.43x.
+Input tracked IP (snoRNA input +26.6 % against IP's +21.7 %), so the normalisation
+cancels — demonstrated here rather than assumed.
+
+The hg38 probe cannot check the published-locus column, because the published coordinates
+are hg19 and the probe does no liftover; that the missed reads are the same class is
+inferred from read names and the length distribution, not from a coordinate match.
+
 ## Which SRA run to use
 
 `data/` holds four runs. Only two are chimeric eCLIP:
