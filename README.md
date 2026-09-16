@@ -17,8 +17,10 @@ Run them in that order:
 
 Each directory has its own README with the method and the reasoning.
 
-The result is [`results/chimeric/RESULTS.md`](results/chimeric/RESULTS.md).
-`make_report.py` writes it from the pipeline's output. Nobody edits it by hand.
+The result is [`results/chimeric_chr25/RESULTS.hg19.md`](results/chimeric_chr25/RESULTS.hg19.md),
+on hg19 with the 25-contig index. `make_report.py` writes it from the pipeline's output.
+Nobody edits it by hand. The hg38 reports are kept for the record but superseded: GRCh38's
+rDNA models make that build unable to reproduce the published calls.
 
 ## Conventions
 

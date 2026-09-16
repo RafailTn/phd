@@ -196,6 +196,11 @@ Alu-to-Alu repeat class 0.49x -> 0.55x, and the exonic non-repeat class 1.43x ->
 Input tracked IP (snoRNA input +26.6 % against IP's +21.7 %), so the normalisation
 cancels — demonstrated here rather than assumed.
 
+These are IP/input rate ratios on unflagged calls, a statistic the report no longer
+uses: the input has no ligation step, so its chimeras are false positives rather than a
+background rate. They show the reference change was neutral; they are not evidence about
+AluACA pairing. See the artefact flags under [Reading the output](#reading-the-output).
+
 The hg38 probe cannot check the published-locus column, because the published coordinates
 are hg19 and the probe does no liftover; that the missed reads are the same class is
 inferred from read names and the length distribution, not from a coordinate match.
@@ -359,6 +364,11 @@ so the bias applied equally and cancelled in the IP-vs-input comparison:
 | AluACA | 0.68x (0.65 - 0.71) | 0.68x (0.65 - 0.71) |
 | snoRNA | 12.75x | 12.99x |
 | all | 2.60x | 2.61x |
+
+These are IP/input rate ratios on unflagged calls, a statistic the report no longer
+uses: the input has no ligation step, so its chimeras are false positives rather than a
+background rate. They show the reference change was neutral; they are not evidence about
+AluACA pairing. See the artefact flags under [Reading the output](#reading-the-output).
 
 So absolute counts and individual gene assignments moved by 1-2%, while every conclusion
 in the report -- all of which rest on ratios -- is unchanged. Quote counts from the dense
