@@ -128,15 +128,15 @@ Top 25 AluACA guides by usable IP calls:
 | hsa-novel-ACA-747.id3390 | 27 | 1 | 28.9 | 175.2 |
 | hsa-novel-ACA-341.id3501 | 24 | 2 | 65 | 261.7 |
 | hsa-novel-ACA-677.id3503 | 21 | 1 | 37.1 | 230.8 |
-| hsa-novel-ACA-595.id3636 | 20 | 4 | 155.9 | 465.5 |
 | hsa-novel-ACA-426.id3277 | 20 | 7 | 272.9 | 671.8 |
+| hsa-novel-ACA-595.id3636 | 20 | 4 | 155.9 | 465.5 |
 | hsa-novel-ACA-806.id3686 | 20 | 5 | 194.9 | 535.2 |
 | hsa-novel-ACA-258.id3530 | 19 | 0 | 0 | 167.1 |
 | hsa-novel-ACA-259.id3667 | 17 | 2 | 91.7 | 386.4 |
 | hsa-novel-ACA-510.id3318 | 16 | 1 | 48.7 | 313.7 |
-| hsa-novel-ACA-420.id3079 | 14 | 0 | 0 | 235 |
 | hsa-novel-ACA-741.id3368 | 14 | 1 | 55.7 | 366 |
 | hsa-novel-ACA-195.id3417 | 14 | 0 | 0 | 235 |
+| hsa-novel-ACA-420.id3079 | 14 | 0 | 0 | 235 |
 | hsa-novel-ACA-483.id3722 | 14 | 0 | 0 | 235 |
 
 ## What the AluACA guides pair with
@@ -250,35 +250,35 @@ Usable exonic, protein-coding calls outside any repeat: 436 in the IP, 26 in the
 | gene_name | IP | input |
 |---|---|---|
 | WDR4 | 4 | 0 |
-| ZDHHC18 | 3 | 0 |
-| CALR | 3 | 0 |
+| CCNL2 | 3 | 0 |
 | CBFA2T3\|ENSG00000261226 | 3 | 0 |
+| MT-ATP6 | 3 | 0 |
+| CALR | 3 | 0 |
+| ZDHHC18 | 3 | 0 |
 | KMT2B | 3 | 0 |
 | ELOF1 | 3 | 0 |
-| MT-ATP6 | 3 | 0 |
-| CCNL2 | 3 | 0 |
-| SMCHD1 | 2 | 0 |
-| SLC35C2 | 2 | 0 |
-| SLC19A1 | 2 | 0 |
-| SON | 2 | 0 |
-| RFC2 | 2 | 0 |
-| RPS24 | 2 | 0 |
-| SAFB | 2 | 0 |
-| RER1 | 2 | 0 |
-| RPS11 | 2 | 0 |
+| ENSG00000291336\|ENSG00000291338\|H4C5 | 2 | 0 |
 | RPL27A | 2 | 0 |
+| RPS11 | 2 | 0 |
+| RPS24 | 2 | 0 |
+| ENSG00000260417\|GSE1 | 2 | 0 |
+| SAFB | 2 | 0 |
+| EEF1D | 2 | 0 |
+| DYNC1LI2 | 2 | 0 |
+| SLC19A1 | 2 | 0 |
+| SLC35C2 | 2 | 0 |
 | RNH1 | 2 | 0 |
-| RAB34 | 2 | 1 |
-| SUPT16H | 2 | 0 |
-| XPO7 | 2 | 0 |
+| SMCHD1 | 2 | 0 |
+| SON | 2 | 0 |
+| CYBA | 2 | 0 |
+| CSDE1 | 2 | 0 |
+| CRKL | 2 | 0 |
 | TXNRD2 | 2 | 0 |
-| TMEM33 | 2 | 0 |
-| CCNYL1 | 2 | 0 |
-| RALY | 2 | 0 |
-| RANBP1 | 2 | 0 |
-| RBM14\|RBM14-RBM4 | 2 | 0 |
+| CEP128 | 2 | 0 |
+| DMTF1 | 2 | 0 |
 | NDUFA2 | 2 | 0 |
-| MRPL35 | 2 | 0 |
+| MTPN | 2 | 0 |
+| MT-ND2 | 2 | 0 |
 
 ### By guide-target pair
 
@@ -287,35 +287,35 @@ Usable exonic, protein-coding calls outside any repeat: 436 in the IP, 26 in the
 | guide_names / gene_name | IP | input |
 |---|---|---|
 | hsa-novel-ACA-514.id3382 / ZDHHC18 | 3 | 0 |
+| hsa-novel-ACA-514.id3382 / TXNRD2 | 2 | 0 |
 | hsa-novel-ACA-616.id3504 / POM121 | 2 | 0 |
-| hsa-novel-ACA-616.id3504 / RALY | 2 | 0 |
 | hsa-novel-ACA-514.id3382 / CCNYL1 | 2 | 0 |
 | hsa-novel-ACA-652.id3749 / SAFB | 2 | 0 |
-| AluACA171_hsa-novel-ACA-108.id3392\|AluACA245_hsa-novel-ACA-151.id3019\|hsa-novel-ACA-704.id3655\|hsa-novel-ACA-77.id3664 / ARF3\|ENSG00000272822 | 2 | 0 |
-| hsa-novel-ACA-390.id3601 / RPL27A | 2 | 0 |
-| hsa-novel-ACA-850.id3496 / CBFA2T3\|ENSG00000261226 | 2 | 0 |
-| hsa-novel-ACA-514.id3382 / TXNRD2 | 2 | 0 |
-| hsa-novel-ACA-815.id3217 / SMCHD1 | 2 | 0 |
-| hsa-novel-ACA-585.id3526 / GFOD2 | 2 | 0 |
-| hsa-novel-ACA-587.id3663 / RFC2 | 2 | 0 |
 | hsa-novel-ACA-514.id3382 / ADGRE5 | 2 | 0 |
-| hsa-novel-ACA-408.id3116 / HNRNPLL | 2 | 0 |
-| hsa-novel-ACA-514.id3382 / PCDH1 | 2 | 0 |
-| hsa-novel-ACA-430.id3745 / RBM14\|RBM14-RBM4 | 2 | 0 |
-| AluACA101_hsa-novel-ACA-92.id3495\|AluACA198_hsa-novel-ACA-403.id3320\|hsa-novel-ACA-161.id3494\|hsa-novel-ACA-379.id3554\|hsa-novel-ACA-614.id3411\|hsa-novel-ACA-682.id3743 / MAP1LC3B | 2 | 0 |
-| hsa-novel-ACA-616.id3504 / CALR | 2 | 0 |
+| hsa-novel-ACA-850.id3496 / CBFA2T3\|ENSG00000261226 | 2 | 0 |
 | hsa-novel-ACA-543.id3558 / CCNL2 | 2 | 0 |
-| hsa-novel-ACA-514.id3382 / MED15 | 2 | 0 |
-| hsa-novel-ACA-514.id3382 / RAB34 | 2 | 1 |
-| hsa-novel-ACA-713.id3155 / IKBKB | 2 | 0 |
-| hsa-novel-ACA-448.id3498 / KMT2B | 2 | 0 |
+| hsa-novel-ACA-616.id3504 / RALY | 2 | 0 |
+| hsa-novel-ACA-585.id3526 / GFOD2 | 2 | 0 |
 | hsa-novel-ACA-450.id3726 / MRPL35 | 2 | 0 |
-| hsa-novel-ACA-514.id3382 / SLC35C2 | 2 | 0 |
-| AluACA279_hsa-novel-ACA-339.id3212 / TMEM33 | 2 | 0 |
+| hsa-novel-ACA-815.id3217 / SMCHD1 | 2 | 0 |
+| hsa-novel-ACA-587.id3663 / RFC2 | 2 | 0 |
+| hsa-novel-ACA-448.id3498 / KMT2B | 2 | 0 |
+| hsa-novel-ACA-616.id3504 / CALR | 2 | 0 |
+| hsa-novel-ACA-408.id3116 / HNRNPLL | 2 | 0 |
+| hsa-novel-ACA-430.id3745 / RBM14\|RBM14-RBM4 | 2 | 0 |
+| hsa-novel-ACA-713.id3155 / IKBKB | 2 | 0 |
+| hsa-novel-ACA-390.id3601 / RPL27A | 2 | 0 |
+| AluACA171_hsa-novel-ACA-108.id3392\|AluACA245_hsa-novel-ACA-151.id3019\|hsa-novel-ACA-704.id3655\|hsa-novel-ACA-77.id3664 / ARF3\|ENSG00000272822 | 2 | 0 |
+| AluACA101_hsa-novel-ACA-92.id3495\|AluACA198_hsa-novel-ACA-403.id3320\|hsa-novel-ACA-161.id3494\|hsa-novel-ACA-379.id3554\|hsa-novel-ACA-614.id3411\|hsa-novel-ACA-682.id3743 / MAP1LC3B | 2 | 0 |
 | hsa-novel-ACA-652.id3749 / CRKL | 2 | 0 |
-| hsa-novel-ACA-616.id3504 / GLUL | 1 | 0 |
-| hsa-novel-ACA-616.id3504 / GOLM2 | 1 | 0 |
-| hsa-novel-ACA-616.id3504 / ENSG00000280607\|MAZ | 1 | 0 |
+| hsa-novel-ACA-514.id3382 / PCDH1 | 2 | 0 |
+| hsa-novel-ACA-514.id3382 / SLC35C2 | 2 | 0 |
+| hsa-novel-ACA-514.id3382 / MED15 | 2 | 0 |
+| AluACA279_hsa-novel-ACA-339.id3212 / TMEM33 | 2 | 0 |
+| hsa-novel-ACA-514.id3382 / RAB34 | 2 | 1 |
+| hsa-novel-ACA-616.id3504 / DMTF1 | 1 | 0 |
+| hsa-novel-ACA-616.id3504 / USP36 | 1 | 0 |
+| hsa-novel-ACA-616.id3504 / CYBA | 1 | 0 |
 
 
 **A candidate list, not identified targets.** 8 mitochondrial and 11 ribosomal-protein
