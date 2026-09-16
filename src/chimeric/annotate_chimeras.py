@@ -25,6 +25,21 @@ itself does not:
        * `target_in_repeat` - the genomic arm lands in an annotated repeat. Alu is the
          single largest repeat family and every AluACA is Alu-derived, so an
          Alu-to-Alu pairing is the dominant false-positive mode here.
+
+  4. Which chimeras are pipeline artefacts. The size-matched input skips the on-bead
+     ligation, so every chimera called there is a false positive, and these flags are
+     what the input calls turned out to be (see the README):
+       * `guide_low_complexity` - the guide arm is >=80% one base. AluACA records carry
+         the A-rich Alu tail, so an mRNA 3' end plus its poly(A) tail is called an
+         AluACA chimera.
+       * `read_contiguous` - one local alignment of the whole read to the genome around
+         the target arm also covers the guide arm: the read is a single transcript,
+         and no ligation is needed to explain it.
+       * `guide_near_target` - the guide arm occurs within 2 kb of the target arm, same
+         orientation (includes `read_contiguous`); catches spliced or edited reads.
+         Weak for AluACA, since an Alu lies within 2 kb of most loci by chance.
+     The last two need `target_arm_aligned`, which checks the read really does align
+     at the reported locus; where it does not, they are left empty.
 """
 
 import argparse
@@ -33,7 +48,8 @@ import gzip
 import os
 import subprocess
 import sys
-from collections import defaultdict
+from collections import Counter, defaultdict
+from multiprocessing import Pool
 
 import pandas as pd
 
@@ -212,6 +228,110 @@ def bed_annotate(df, gtag, gtf, source_bed, rmsk, bedtools, workdir):
     return df
 
 
+# --- artefact flags -----------------------------------------------------------
+# Thresholds, tuned against the input library, where every call is a false positive.
+# Guide-arm coverage by the contiguity alignment is bimodal (<20% or >80%), so the
+# calls do not hinge on the exact cut-offs.
+HOMOPOLYMER = 0.8   # share of the guide arm taken by its most common base
+MIN_COV = 0.8       # share of an arm inside the local alignment
+MIN_IDENT = 0.9     # identity over the aligned columns
+FLANK = 30          # genome beyond guide-arm length either side of the target arm
+NEAR = 2000         # window for guide_near_target
+_RC = str.maketrans('ACGTNacgtn', 'TGCANtgcan')
+
+
+def guide_arm(r):
+    return r.sequence[int(r.map_to_snoRNA_read_start) - 1:int(r.map_to_snoRNA_read_stop)]
+
+
+def low_complexity(seq):
+    return bool(seq) and Counter(seq).most_common(1)[0][1] / len(seq) >= HOMOPOLYMER
+
+
+def _init_worker(genome_fa):
+    global _FA, _AL
+    import pysam
+    from Bio.Align import PairwiseAligner
+    _FA = pysam.FastaFile(genome_fa)
+    _AL = PairwiseAligner(mode='local', match_score=2, mismatch_score=-3,
+                          open_gap_score=-5, extend_gap_score=-2)
+
+
+def _window(chrom, start, stop, strand, pad):
+    """Genome around [start, stop) (0-based), in read orientation."""
+    w = _FA.fetch(chrom, max(0, start - pad), stop + pad).upper()
+    return w.translate(_RC)[::-1] if strand == '-' else w
+
+
+def _align(window, query):
+    """Read-side aligned intervals and identity of the best local alignment."""
+    a = _AL.align(window, query)[0]
+    blocks = [tuple(b) for b in a.aligned[1]]
+    same = cols = 0
+    for (ws, we), (qs, _) in zip(a.aligned[0], a.aligned[1]):
+        cols += we - ws
+        same += sum(window[ws + k] == query[qs + k] for k in range(we - ws))
+    return blocks, same / max(1, cols)
+
+
+def _cov(blocks, a, b):
+    return sum(max(0, min(e, b) - max(s, a)) for s, e in blocks) / max(1, b - a)
+
+
+def _flag_one(r):
+    """(target_arm_aligned, read_contiguous, guide_near_target) for one genomic arm.
+
+    Aligns the whole read rather than trusting the pipeline's per-arm read boundaries,
+    which are not exact at the junction: position-exact comparison validated only 57%
+    of target arms, this validates ~92%."""
+    seq, gs, ge, ts, te, chrom, start, stop, strand = r
+    try:
+        w = _window(chrom, start - 1, stop, strand, ge - gs + 1 + FLANK)
+    except (KeyError, ValueError):
+        return None, None, None
+    blocks, ident = _align(w, seq)
+    if _cov(blocks, ts - 1, te) < MIN_COV:
+        return False, None, None
+    contiguous = _cov(blocks, gs - 1, ge) >= MIN_COV and ident >= MIN_IDENT
+    if contiguous:
+        return True, True, True
+    guide = seq[gs - 1:ge]
+    try:
+        w = _window(chrom, start - 1, stop, strand, NEAR)
+    except (KeyError, ValueError):
+        return True, False, None
+    gblocks, gident = _align(w, guide)
+    near = _cov(gblocks, 0, len(guide)) >= MIN_COV and gident >= MIN_IDENT
+    return True, False, near
+
+
+def artefact_flags(df, gtag, genome_fa, cpus):
+    """Add the pipeline-artefact columns; see point 4 of the module docstring."""
+    df['guide_arm_len'] = (df.map_to_snoRNA_read_stop - df.map_to_snoRNA_read_start + 1).astype(int)
+    df['guide_low_complexity'] = [low_complexity(guide_arm(r)) for r in df.itertuples()]
+    cols = ('target_arm_aligned', 'read_contiguous', 'guide_near_target')
+    for c in cols:
+        df[c] = pd.Series(float('nan'), index=df.index, dtype=object)
+    if not genome_fa or not os.path.exists(genome_fa):
+        print(f'  ! no genome FASTA at {genome_fa!r}; contiguity flags left empty', file=sys.stderr)
+        return df
+    if not os.path.exists(genome_fa + '.fai'):
+        sys.exit(f'{genome_fa} has no .fai index; run `samtools faidx {genome_fa}` first.')
+    g = df[df.target_class == gtag]
+    if g.empty:
+        return df
+    print(f'  aligning {len(g):,} genomic chimeras back to the genome ({cpus} processes) ...')
+    rows = [(r.sequence, int(r.map_to_snoRNA_read_start), int(r.map_to_snoRNA_read_stop),
+             int(r.map_to_target_read_start), int(r.map_to_target_read_stop),
+             r.reference_target, int(r.map_to_target_ref_start), int(r.map_to_target_ref_stop),
+             r.map_to_target_strand) for r in g.itertuples()]
+    with Pool(cpus, initializer=_init_worker, initargs=(genome_fa,)) as pool:
+        res = pool.map(_flag_one, rows, chunksize=200)
+    for c, vals in zip(cols, zip(*res)):
+        df.loc[g.index, c] = list(vals)
+    return df
+
+
 def default_gtf(gtag):
     """The annotation fetch_refs.sh downloads, under ref/chimeric/<build>/.
 
@@ -225,11 +345,18 @@ def default_gtf(gtag):
     return os.path.join(ref, gtag, names.get(gtag, names['hg38']))
 
 
+def default_genome_fa(gtag):
+    """The primary assembly fetch_refs.sh downloads, next to the GTF."""
+    names = {'hg38': 'GRCh38.primary_assembly.genome.fa',
+             'hg19': 'GRCh37.primary_assembly.genome.fa'}
+    return os.path.join(os.path.dirname(default_gtf(gtag)), names.get(gtag, names['hg38']))
+
+
 def main():
     p = argparse.ArgumentParser(description=__doc__,
                                 formatter_class=argparse.RawDescriptionHelpFormatter)
-    p.add_argument('--outdir', required=True, help='Pipeline output directory.')
-    p.add_argument('--uid', required=True, help='Sample identifier.')
+    p.add_argument('--outdir', help='Pipeline output directory; required unless --annotated.')
+    p.add_argument('--uid', help='Sample identifier; required unless --annotated.')
     p.add_argument('--stag', default='snoRNA', help='Source RNA tag, default: %(default)s.')
     p.add_argument('--tags', default='rRNA,snRNA,tRNA,hg38',
                    help='Comma separated target tags, default: %(default)s.')
@@ -246,11 +373,32 @@ def main():
                    help='BED of repeats, for the Alu-to-Alu flag.')
     p.add_argument('--bedtools', default=None,
                    help='bedtools executable. Default: $BEDTOOLS, the project pixi env, then PATH.')
+    p.add_argument('--genome-fa', default=None,
+                   help='Genome FASTA (with .fai) for the contiguity flags. Default: $GENOME_FA, '
+                        'else the one fetch_refs.sh puts in ref/chimeric/<gtag>/.')
+    p.add_argument('--cpus', type=int, default=int(os.environ.get('CPUS') or os.cpu_count() or 1),
+                   help='Processes for the contiguity alignments, default: %(default)s.')
+    p.add_argument('--annotated', default='',
+                   help='Existing annotated TSV: only (re)compute the artefact flags on it, '
+                        'skipping pooling and bedtools. For results whose per-target CSVs are '
+                        'elsewhere.')
     p.add_argument('--out', required=True, help='Output TSV of annotated chimeras.')
     args = p.parse_args()
+    if not args.annotated and not (args.outdir and args.uid):
+        p.error('--outdir and --uid are required unless --annotated is given')
     # Resolved here rather than as argparse defaults: the GTF depends on --gtag,
     # and the tool lookup should not run when an explicit path was given.
     args.gtf = args.gtf or os.environ.get('GENCODE') or default_gtf(args.gtag)
+    args.genome_fa = args.genome_fa or os.environ.get('GENOME_FA') or default_genome_fa(args.gtag)
+
+    if args.annotated:
+        df = pd.read_csv(args.annotated, sep='\t', low_memory=False)
+        print(f'Re-flagging {df.shape[0]:,} chimeras from {args.annotated}')
+        df = artefact_flags(df, args.gtag, args.genome_fa, args.cpus)
+        df.to_csv(args.out, sep='\t', index=False)
+        print(f'\nWrote {args.out}')
+        summarise_flags(df)
+        return
     args.bedtools = find_tool('bedtools', args.bedtools)
 
     tags = [t for t in args.tags.split(',') if t]
@@ -266,6 +414,7 @@ def main():
 
     df = bed_annotate(df, args.gtag, args.gtf, args.source_bed, args.rmsk,
                       args.bedtools, os.path.join(args.outdir, 'annotate_work'))
+    df = artefact_flags(df, args.gtag, args.genome_fa, args.cpus)
     df.to_csv(args.out, sep='\t', index=False)
     print(f'\nWrote {args.out}')
 
@@ -294,6 +443,24 @@ def main():
                 # downcast it is deprecated in pandas 2.x.
                 n = alu[flag].eq(True).sum()
                 print(f'\nflagged {flag}: {n:,} of {alu.shape[0]:,} AluACA chimeras')
+    summarise_flags(df)
+
+
+def summarise_flags(df):
+    """Share of each guide class's genomic chimeras carrying each artefact flag."""
+    g = df[df.target_arm_aligned.eq(True)] if 'target_arm_aligned' in df else df.iloc[:0]
+    if g.empty:
+        return
+    any_flag = g.guide_low_complexity.eq(True) | g.guide_near_target.eq(True)
+    t = pd.DataFrame({
+        'aligned': g.groupby('guide_class').size(),
+        'low_complexity': g.guide_low_complexity.eq(True).groupby(g.guide_class).mean(),
+        'contiguous': g.read_contiguous.eq(True).groupby(g.guide_class).mean(),
+        'near_target': g.guide_near_target.eq(True).groupby(g.guide_class).mean(),
+        'unflagged': (~any_flag).groupby(g.guide_class).mean(),
+    })
+    print('\n=== artefact flags, genomic chimeras whose target arm re-aligned ===')
+    print(t.to_string(float_format=lambda v: f'{v:.1%}'))
 
 
 if __name__ == '__main__':

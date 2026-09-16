@@ -130,6 +130,8 @@ step_annotate () {
     || echo "[annotate] no guide-locus BED at $GUIDE_BED, skipping that flag"
   [ -s "$RMSK_BED" ] && bed_args+=(--rmsk "$RMSK_BED") \
     || echo "[annotate] no RepeatMasker BED at $RMSK_BED, skipping that flag"
+  [ -s "$GENOME_FA" ] && bed_args+=(--genome-fa "$GENOME_FA" --cpus "$CPUS") \
+    || echo "[annotate] no genome FASTA at $GENOME_FA, skipping the contiguity flags"
   for srr in "${SAMPLES[@]}"; do
     say "$ARM $srr annotate"
     "$PYTHON" "$SRC/annotate_chimeras.py" \

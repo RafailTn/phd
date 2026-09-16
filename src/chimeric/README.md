@@ -440,4 +440,29 @@ by `annotate_chimeras.py` into one TSV with:
   dominant false-positive mode for this particular question** and this column is the one
   to look at before believing any AluACA target.
 
-Both flags are columns, not filters, so the cost of applying either stays visible.
+Artefact flags. The size-matched input skips the on-bead ligation, so every chimera
+called there is a false positive; these columns are what the input calls turned out to be.
+They need the genome FASTA (`--genome-fa`, `.fai` alongside):
+
+- `guide_arm_len` — length of the guide arm in the read.
+- `guide_low_complexity` — the guide arm is ≥80 % one base. AluACA records carry the
+  A-rich Alu tail, so an mRNA 3′ end plus its poly(A) tail is called an AluACA chimera;
+  `hsa-novel-ACA-368` is mostly this.
+- `target_arm_aligned` — a local alignment of the whole read to the genome around the
+  reported target locus covers ≥80 % of the target arm. The two columns below are only
+  filled where this is true (~92 % of genomic chimeras). The pipeline's per-arm read
+  coordinates are not exact at the junction, which is why the whole read is aligned.
+- `read_contiguous` — that same alignment also covers ≥80 % of the guide arm at ≥90 %
+  identity: the read is one transcript, not a chimera.
+- `guide_near_target` — the guide arm aligns within 2 kb of the target arm in the same
+  orientation (includes `read_contiguous`). Catches spliced or edited reads; weak for
+  AluACA, as an Alu lies within 2 kb of most loci by chance.
+
+All flags are columns, not filters, so the cost of applying any of them stays visible.
+To add the artefact flags to an existing table without the per-target CSVs:
+
+```bash
+python3 src/chimeric/annotate_chimeras.py --gtag hg19 \
+    --annotated results/chimeric_chr25/arm3_hg19_merged/SRR30692552.annotated.tsv \
+    --out       results/chimeric_chr25/arm3_hg19_merged/SRR30692552.annotated.tsv
+```
