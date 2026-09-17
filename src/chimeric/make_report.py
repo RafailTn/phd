@@ -63,13 +63,18 @@ def poisson_ci(k, conf=CONF):
 
 
 def verdict(hi):
+    """What the upper bound of the false-positive share supports -- and no more.
+
+    The input cannot see artefacts of the on-bead ligation itself, so a call the input
+    does not explain is IP-specific: necessary for real pairing, not sufficient. The
+    labels say that rather than "real"."""
     if hi != hi:  # NaN: no IP calls
         return 'no IP calls'
     if hi < 0.5:
-        return 'mostly real'
+        return 'mostly IP-specific'
     if hi < SIGNAL:
-        return 'some real signal'
-    return 'not distinguishable from artefact'
+        return 'partly IP-specific'
+    return 'not distinguishable from input artefacts'
 
 
 def _pct(v):
@@ -93,7 +98,8 @@ def fp_cells(x, y, n1, n2):
 FP_COLS = ['IP', 'input', 'IP per M', 'input per M (95% CI)',
            'false-positive share (95% CI)', 'est. real IP chimeras', 'verdict']
 
-FLAGS = ('guide_low_complexity', 'target_arm_aligned', 'read_contiguous', 'guide_near_target')
+FLAGS = ('guide_low_complexity', 'target_arm_aligned', 'read_contiguous', 'guide_near_target',
+         'genome_contiguity')
 
 
 def _flag(d, c):
@@ -103,13 +109,14 @@ def _flag(d, c):
 def usable(d, gtag):
     """Calls that survive the artefact flags from annotate_chimeras.py.
 
-    Low-complexity guide arms are removed for every target. A genomic call must also
-    re-align at its reported locus (otherwise it cannot be checked) and must not have its
-    guide arm within 2 kb of the target, which includes the contiguous reads. rRNA, snRNA
-    and tRNA targets have no genome locus to check contiguity against."""
+    For every target: the guide arm must not be a simple repeat (DUST), and the whole
+    read must not align contiguously anywhere in the genome, nor map to too many loci
+    to check. A genomic call must also re-align at its reported locus (otherwise it
+    cannot be checked) and must not have its guide arm within 2 kb of the target."""
     genomic = d.target_class == gtag
     ok = ~_flag(d, 'target_arm_aligned') | _flag(d, 'guide_near_target')
-    return ~_flag(d, 'guide_low_complexity') & ~(genomic & ok)
+    gw = d.genome_contiguity.isin(['contiguous', 'too many loci'])
+    return ~_flag(d, 'guide_low_complexity') & ~gw & ~(genomic & ok)
 
 
 def read_counts(outdir, uid):
@@ -146,10 +153,13 @@ def load(path):
         sys.exit(f'missing {path}; run annotate_chimeras.py first')
     df = pd.read_csv(path, sep='\t', low_memory=False)
     missing = [c for c in FLAGS if c not in df.columns]
+    if not missing and df['genome_contiguity'].isna().all():
+        missing = ['genome_contiguity (column present but empty: no STAR index was given)']
     if missing:
         sys.exit(f'{path} has no artefact flags ({", ".join(missing)}). Add them with\n'
                  f'  python3 src/chimeric/annotate_chimeras.py --annotated {path} --out {path} '
-                 f'--gtag <build>')
+                 f'--gtag <build> --genome-index <STAR index>\n'
+                 f'The genome-wide check loads the STAR index, so run it where that fits in RAM.')
     for c in ('target_in_repeat', 'target_in_source_locus'):
         if c in df.columns:
             df[c] = df[c].astype("object").where(df[c].notna(), False).astype(bool)
@@ -326,9 +336,9 @@ def main():
     o.append('\nMasking keeps only reads that fail to align end-to-end to both the RepBase '
              f'human consensus set and {a.gtag} — the pipeline\'s definition of a candidate '
              'chimera. It is not a complete filter: a contiguous read with a few non-genomic '
-             'bases at its ends (a poly(A) tail, an adapter remnant) also fails end-to-end '
-             'alignment and goes on to chimera calling, which is what the artefact flags below '
-             'catch.\n')
+             'bases at its ends (a poly(A) tail, an adapter remnant), or one ~95% identical '
+             'to several repeat copies, also fails end-to-end alignment and goes on to chimera '
+             'calling. That is what the artefact flags below catch.\n')
 
     o.append('## Chimeras by guide class and target\n')
     o.append(crosstab(ip, f'{a.ip} — IP', a.gtag))
@@ -359,9 +369,10 @@ This report therefore does two things. It removes the artefacts the input calls 
 out to be (the flags from `annotate_chimeras.py`, below), and it uses what is left in the
 input to estimate the **false-positive share** of the IP calls: the input's calls per
 million trimmed reads divided by the IP's. A share whose 95% upper bound is below 100%
-means the input cannot account for all of the IP calls, so some are real; a share whose
-upper bound is at or above 100% means the data cannot distinguish that class from
-artefact.
+means the input cannot account for all of the IP calls: some are **IP-specific**. That is
+necessary for real pairing but not sufficient, because artefacts of the on-bead ligation
+are IP-specific too (see chrM). A share whose upper bound is at or above 100% means the
+data cannot distinguish that class from the artefacts the input does measure.
 
 Arithmetically the share is the inverse of an IP/input rate ratio. What changes is the
 reading, that it is computed after the artefact flags, and that a zero input count is
@@ -376,22 +387,28 @@ joined at random on the bead. Those are estimated separately from chrM, below.
 
     o.append('### Artefact flags\n')
     o.append('Each call is attributed to the first flag that removes it, so the rows sum. '
-             'Contiguity can only be checked for genomic targets.\n')
+             'A simple-repeat guide arm matches too many sequences to say which RNA it came '
+             'from. "Contiguous in the genome" means one alignment of the whole read, at any '
+             'locus, covers both arms: a single transcript split in two. The last two columns '
+             'apply to genomic targets only.\n')
     frows = {}
     for lib, d in (('IP', ip), ('input', ctrl)):
         for cls in classes:
             x = d[d.guide_class == cls]
             lowc = _flag(x, 'guide_low_complexity')
             gen = x.target_class == a.gtag
-            unal = gen & ~lowc & ~_flag(x, 'target_arm_aligned')
-            cont = gen & ~lowc & ~unal & _flag(x, 'read_contiguous')
-            near = gen & ~lowc & ~unal & ~cont & _flag(x, 'guide_near_target')
-            frows[f'{lib} {cls}'] = [len(x), int(lowc.sum()), int(unal.sum()), int(cont.sum()),
-                                     int(near.sum()), int(x.usable.sum()),
+            cont = ~lowc & x.genome_contiguity.eq('contiguous')
+            many = ~lowc & ~cont & x.genome_contiguity.eq('too many loci')
+            rest = ~lowc & ~cont & ~many
+            unal = gen & rest & ~_flag(x, 'target_arm_aligned')
+            near = gen & rest & ~unal & _flag(x, 'guide_near_target')
+            frows[f'{lib} {cls}'] = [len(x), int(lowc.sum()), int(cont.sum()), int(many.sum()),
+                                     int(unal.sum()), int(near.sum()), int(x.usable.sum()),
                                      f'{100 * x.usable.mean():.1f}%' if len(x) else '']
     o.append(md_table(pd.DataFrame.from_dict(frows, orient='index', columns=[
-        'called', 'low-complexity guide', 'genomic, not re-aligned', 'genomic, contiguous',
-        'genomic, guide within 2 kb', 'usable', 'usable share']), 'library / guide class'))
+        'called', 'simple-repeat guide (DUST)', 'contiguous in the genome', 'too many loci',
+        'genomic, not re-aligned', 'genomic, guide within 2 kb', 'usable', 'usable share']),
+        'library / guide class'))
     o.append('')
 
     # ---- false-positive share by guide class ---------------------------------
@@ -441,8 +458,8 @@ joined at random on the bead. Those are estimated separately from chrM, below.
             o.append('That is not the same as saying AluACAs do not pair with DKC1 targets. '
                      'It says that, at this input depth and with the artefacts identified so '
                      'far, any real AluACA chimeras cannot be separated from the calls the '
-                     'input shows the pipeline makes without ligation. The strata below test '
-                     'whether a subset can be.\n')
+                     'input shows the pipeline makes without ligation. The rows and strata below '
+                     'test whether a subset can be.\n')
 
     # ---- per guide -----------------------------------------------------------
     MINC = 20
@@ -538,8 +555,9 @@ carrying most calls -- is a sign that particular sequences, not pairing, generat
                      + '; '.join(f'*{l}* ({_pct(strat[("AluACA", l)][2])}, upper '
                                  f'{_pct(strat[("AluACA", l)][4])}, {strat[("AluACA", l)][0]:,} IP calls)'
                                  for l in sig)
-                     + '. These are the only places the data separate AluACA calls from '
-                       'artefact, and each still needs the duplex test before it is read as pairing.'
+                     + '. These are the only places AluACA calls are IP-specific. IP-specific '
+                       'includes ligation artefacts, so each still needs the duplex test before '
+                       'it is read as pairing.'
                      + (' Given the failed assumption above, treat them as leads: the share is '
                         'not calibrated for AluACA guides.' if alu_uncal else '') + '\n')
         else:
@@ -684,8 +702,8 @@ Names joined by `|` are ambiguous calls, not composites.
         if gtot:
             o.append(f'Of {gtot:,} AluACA IP calls with a genomic arm:\n')
             o.append(f'- **{int((~G.usable).sum()):,} ({100 * (~G.usable).mean():.1f}%)** are removed '
-                     'by the artefact flags (low-complexity guide, not re-aligned, contiguous, or '
-                     'guide within 2 kb).')
+                     'by the artefact flags (simple-repeat guide, contiguous somewhere in the '
+                     'genome, too many loci, not re-aligned, or guide within 2 kb).')
             o.append(f'- of the {len(GU):,} usable, **{int(GU.target_in_repeat.sum()):,}** have the '
                      f'arm inside an annotated repeat and **{int(GU.target_in_source_locus.sum()):,}** '
                      'land on a guide locus on the same strand. Both are flagged, not removed.')

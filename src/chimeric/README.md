@@ -452,12 +452,18 @@ by `annotate_chimeras.py` into one TSV with:
 
 Artefact flags. The size-matched input skips the on-bead ligation, so every chimera
 called there is a false positive; these columns are what the input calls turned out to be.
-They need the genome FASTA (`--genome-fa`, `.fai` alongside):
+They need the genome FASTA (`--genome-fa`, `.fai` alongside), and the genome-wide check also
+needs the STAR index (`--genome-index`), so it runs where that index fits in RAM:
 
 - `guide_arm_len` — length of the guide arm in the read.
-- `guide_low_complexity` — the guide arm is ≥80 % one base. AluACA records carry the
-  A-rich Alu tail, so an mRNA 3′ end plus its poly(A) tail is called an AluACA chimera;
-  `hsa-novel-ACA-368` is mostly this.
+- `guide_dust` — DUST score of the guide arm: counts of each overlapping 3-mer, summed as
+  c(c−1)/2 and normalised by length. Simple repeats reuse a few 3-mers and score high
+  (poly(A) ≈ 11, (GA)n ≈ 4); ordinary sequence scores well below 1.
+- `guide_low_complexity` — `guide_dust` ≥ 2. The arm is a simple repeat that matches too
+  many sequences to say which RNA it came from. At this threshold the snoRNA control loses
+  ~1.6 % of otherwise-usable calls. It catches poly(A) arms (AluACA records carry the A-rich
+  Alu tail, so an mRNA 3′ end plus its poly(A) tail is called an AluACA chimera — most of
+  `hsa-novel-ACA-368`) and (GA)n arms (almost all of `hsa-novel-ACA-514`).
 - `target_arm_aligned` — a local alignment of the whole read to the genome around the
   reported target locus covers ≥80 % of the target arm. The two columns below are only
   filled where this is true (~92 % of genomic chimeras). The pipeline's per-arm read
@@ -467,12 +473,24 @@ They need the genome FASTA (`--genome-fa`, `.fai` alongside):
 - `guide_near_target` — the guide arm aligns within 2 kb of the target arm in the same
   orientation (includes `read_contiguous`). Catches spliced or edited reads; weak for
   AluACA, as an Alu lies within 2 kb of most loci by chance.
+- `genome_contiguity` — `contiguous` if the whole read is contiguous at *any* locus, not
+  just the reported one; `too many loci` if it maps to more than 500; otherwise `no`. STAR
+  (local mode) proposes every locus the read aligns to, and each is re-aligned with the same
+  aligner and thresholds as `read_contiguous`, which it always includes. STAR's own
+  alignment is not used for the call: it soft-clips a short guide arm with a couple of
+  mismatches even where the read is contiguous. This catches multi-copy transcripts whose
+  "target" was placed at the wrong copy — `hsa-novel-ACA-562`'s calls are one
+  pericentromeric chr9/chr20 transcript split in two.
+- `genome_loci` — how many loci STAR reported for the read.
 
 All flags are columns, not filters, so the cost of applying any of them stays visible.
-To add the artefact flags to an existing table without the per-target CSVs:
+`make_report.py` leaves flagged calls out of its tables but counts them per flag, and
+refuses tables without the flags. To add them to an existing table without the per-target
+CSVs:
 
 ```bash
 python3 src/chimeric/annotate_chimeras.py --gtag hg19 \
+    --genome-index ref/chimeric/hg19_chr25_star_index \
     --annotated results/chimeric_chr25/arm3_hg19_merged/SRR30692552.annotated.tsv \
     --out       results/chimeric_chr25/arm3_hg19_merged/SRR30692552.annotated.tsv
 ```

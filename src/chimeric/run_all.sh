@@ -132,6 +132,9 @@ step_annotate () {
     || echo "[annotate] no RepeatMasker BED at $RMSK_BED, skipping that flag"
   [ -s "$GENOME_FA" ] && bed_args+=(--genome-fa "$GENOME_FA" --cpus "$CPUS") \
     || echo "[annotate] no genome FASTA at $GENOME_FA, skipping the contiguity flags"
+  [ -f "$GENOME_INDEX/SA" ] && bed_args+=(--genome-index "$GENOME_INDEX") \
+    || echo "[annotate] no STAR index at $GENOME_INDEX, skipping the genome-wide contiguity" \
+            "check (make_report.py will refuse the tables without it)"
   for srr in "${SAMPLES[@]}"; do
     say "$ARM $srr annotate"
     "$PYTHON" "$SRC/annotate_chimeras.py" \

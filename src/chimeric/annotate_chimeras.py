@@ -29,9 +29,15 @@ itself does not:
   4. Which chimeras are pipeline artefacts. The size-matched input skips the on-bead
      ligation, so every chimera called there is a false positive, and these flags are
      what the input calls turned out to be (see the README):
-       * `guide_low_complexity` - the guide arm is >=80% one base. AluACA records carry
-         the A-rich Alu tail, so an mRNA 3' end plus its poly(A) tail is called an
-         AluACA chimera.
+       * `guide_low_complexity` - the guide arm's DUST score is >= 2: it is a simple
+         repeat (poly(A), (GA)n, (TG)n ...) that matches too many sequences to say which
+         RNA it came from. AluACA records carry the A-rich Alu tail, so an mRNA 3' end
+         plus its poly(A) tail is otherwise called an AluACA chimera.
+       * `genome_contiguity` - the whole read aligned against the entire genome with
+         STAR: `contiguous` if one alignment anywhere covers both arms, `too many loci`
+         if it maps to more places than can be listed, else `no`. Catches multi-copy
+         transcripts whose "target" was placed at the wrong copy, which the local
+         checks below cannot, since they only look around the reported locus.
        * `read_contiguous` - one local alignment of the whole read to the genome around
          the target arm also covers the guide arm: the read is a single transcript,
          and no ligation is needed to explain it.
@@ -46,6 +52,7 @@ import argparse
 import glob
 import gzip
 import os
+import re
 import subprocess
 import sys
 from collections import Counter, defaultdict
@@ -232,7 +239,8 @@ def bed_annotate(df, gtag, gtf, source_bed, rmsk, bedtools, workdir):
 # Thresholds, tuned against the input library, where every call is a false positive.
 # Guide-arm coverage by the contiguity alignment is bimodal (<20% or >80%), so the
 # calls do not hinge on the exact cut-offs.
-HOMOPOLYMER = 0.8   # share of the guide arm taken by its most common base
+DUST_MAX = 2.0      # guide arms scoring at or above this are simple repeats; costs the
+                    # snoRNA control ~1.6% of its calls, removes all (GA)n / poly(A) arms
 MIN_COV = 0.8       # share of an arm inside the local alignment
 MIN_IDENT = 0.9     # identity over the aligned columns
 FLANK = 30          # genome beyond guide-arm length either side of the target arm
@@ -244,8 +252,22 @@ def guide_arm(r):
     return r.sequence[int(r.map_to_snoRNA_read_start) - 1:int(r.map_to_snoRNA_read_stop)]
 
 
+def dust(seq):
+    """DUST score (the BLAST low-complexity measure) of a sequence.
+
+    Counts every overlapping 3-mer and sums c*(c-1)/2 over them, normalised by the
+    number of 3-mers minus one. A simple repeat reuses a few 3-mers and scores high
+    (poly(A) ~11, (GA)n ~4); ordinary sequence scores well below 1."""
+    n = len(seq) - 2
+    if n < 2:
+        return float('nan')
+    c = Counter(seq[i:i + 3] for i in range(n))
+    return sum(v * (v - 1) / 2 for v in c.values()) / (n - 1)
+
+
 def low_complexity(seq):
-    return bool(seq) and Counter(seq).most_common(1)[0][1] / len(seq) >= HOMOPOLYMER
+    d = dust(seq)
+    return d == d and d >= DUST_MAX
 
 
 def _init_worker(genome_fa):
@@ -308,7 +330,8 @@ def _flag_one(r):
 def artefact_flags(df, gtag, genome_fa, cpus):
     """Add the pipeline-artefact columns; see point 4 of the module docstring."""
     df['guide_arm_len'] = (df.map_to_snoRNA_read_stop - df.map_to_snoRNA_read_start + 1).astype(int)
-    df['guide_low_complexity'] = [low_complexity(guide_arm(r)) for r in df.itertuples()]
+    df['guide_dust'] = [round(dust(guide_arm(r)), 3) for r in df.itertuples()]
+    df['guide_low_complexity'] = df.guide_dust.ge(DUST_MAX)
     cols = ('target_arm_aligned', 'read_contiguous', 'guide_near_target')
     for c in cols:
         df[c] = pd.Series(float('nan'), index=df.index, dtype=object)
@@ -329,6 +352,120 @@ def artefact_flags(df, gtag, genome_fa, cpus):
         res = pool.map(_flag_one, rows, chunksize=200)
     for c, vals in zip(cols, zip(*res)):
         df.loc[g.index, c] = list(vals)
+    return df
+
+
+# --- genome-wide contiguity ----------------------------------------------------
+# The pipeline's genome mask aligns reads end-to-end, so a transcript with a few
+# non-genomic bases at its ends, or ~95% identical to several copies, escapes it and is
+# split into a "chimera". The local checks above only look around the reported target
+# locus, so a multi-copy transcript whose "target" was placed at the wrong copy passes.
+#
+# Two stages. STAR proposes every locus the whole read aligns to (local mode, so ragged
+# ends clip). STAR's own alignment cannot make the call: it soft-clips a short guide arm
+# carrying a couple of mismatches, even where the read is contiguous. So each proposed
+# locus, plus the pipeline's reported one, is re-aligned with the same aligner and
+# thresholds as read_contiguous -- which makes this a strict superset of that check.
+MULTIMAP_MAX = 500
+MAX_CANDIDATES = 20
+_CIGAR = re.compile(r'(\d+)([MIDNSHP=X])')
+
+
+def _ref_span(cigar):
+    return sum(int(n) for n, op in _CIGAR.findall(cigar) if op in 'MDN=X')
+
+
+def _contig_anywhere(r):
+    """(contiguous?, loci STAR proposed) for one call, over all candidate loci."""
+    seq, gs, ge, ts, te, cands, n_loci = r
+    pad = len(seq) + FLANK
+    for chrom, start, stop, strand in cands:
+        try:
+            w = _window(chrom, start, stop, strand, pad)
+        except (KeyError, ValueError):
+            continue
+        blocks, ident = _align(w, seq)
+        if _cov(blocks, gs - 1, ge) >= MIN_COV and _cov(blocks, ts - 1, te) >= MIN_COV \
+                and ident >= MIN_IDENT:
+            return 'contiguous', n_loci
+    return 'no', n_loci
+
+
+def genome_contiguity(df, star, index, genome_fa, cpus, workdir):
+    """Add `genome_contiguity` and `genome_loci`; see the comment block above."""
+    df['genome_contiguity'] = pd.Series(float('nan'), index=df.index, dtype=object)
+    df['genome_loci'] = pd.Series(float('nan'), index=df.index, dtype=object)
+    if not index or not os.path.exists(os.path.join(index, 'SA')):
+        print(f'  ! no STAR index at {index!r}; genome-wide contiguity left empty', file=sys.stderr)
+        return df
+    if not genome_fa or not os.path.exists(genome_fa + '.fai'):
+        print(f'  ! genome-wide contiguity needs the genome FASTA with .fai too; left empty',
+              file=sys.stderr)
+        return df
+    os.makedirs(workdir, exist_ok=True)
+    uniq = {s: i for i, s in enumerate(pd.unique(df.sequence.astype(str)))}
+    fa = os.path.join(workdir, 'reads.fa')
+    with open(fa, 'w') as o:
+        o.writelines(f'>{i}\n{s}\n' for s, i in uniq.items())
+    print(f'  proposing loci for {len(uniq):,} distinct reads with STAR ...')
+    cmd = [star, '--runMode', 'alignReads', '--genomeDir', index, '--readFilesIn', fa,
+           '--runThreadN', str(cpus), '--outFileNamePrefix', os.path.join(workdir, ''),
+           '--outSAMtype', 'SAM', '--outSAMunmapped', 'Within', '--outSAMattributes', 'NH',
+           '--outSAMmode', 'NoQS',
+           '--alignEndsType', 'Local', '--outFilterScoreMinOverLread', '0',
+           '--outFilterMatchNminOverLread', '0', '--outFilterMatchNmin', '16',
+           '--outFilterMismatchNoverLmax', '0.1',
+           '--outFilterMultimapNmax', str(MULTIMAP_MAX),
+           '--winAnchorMultimapNmax', str(2 * MULTIMAP_MAX),
+           '--outSAMmultNmax', str(MAX_CANDIDATES),
+           # a spliced read is still one transcript, but only across canonical introns of
+           # plausible size -- otherwise two loci on one chromosome would pass as "spliced"
+           '--alignIntronMax', '100000', '--outFilterIntronMotifs', 'RemoveNoncanonical']
+    p = subprocess.run(cmd, capture_output=True, text=True)
+    if p.returncode:
+        sys.exit(f'STAR failed ({p.returncode}): {p.stderr.strip()[-500:]}')
+
+    cands = defaultdict(list)   # read id -> [(chrom, start0, stop, strand)]
+    loci, too_many = {}, set()
+    with open(os.path.join(workdir, 'Aligned.out.sam')) as fh:
+        for line in fh:
+            if line.startswith('@'):
+                continue
+            f = line.rstrip('\n').split('\t')
+            rid, flag = int(f[0]), int(f[1])
+            tags = {t.split(':', 2)[0]: t.split(':', 2)[2] for t in f[11:]}
+            if flag & 4:
+                if tags.get('uT') == '3':
+                    too_many.add(rid)
+                continue
+            start = int(f[3]) - 1
+            cands[rid].append((f[2], start, start + _ref_span(f[5]), '-' if flag & 16 else '+'))
+            loci[rid] = int(tags.get('NH', 1))
+
+    rows, idx = [], []
+    for r in df.itertuples():
+        rid = uniq[str(r.sequence)]
+        c = list(cands.get(rid, []))
+        if r.target_class == df.attrs.get('gtag'):
+            # the pipeline's own placement, so this can only add to read_contiguous
+            c.append((r.reference_target, int(r.map_to_target_ref_start) - 1,
+                      int(r.map_to_target_ref_stop), r.map_to_target_strand))
+        if rid in too_many and not c:
+            df.at[r.Index, 'genome_contiguity'] = 'too many loci'
+            continue
+        rows.append((str(r.sequence), int(r.map_to_snoRNA_read_start), int(r.map_to_snoRNA_read_stop),
+                     int(r.map_to_target_read_start), int(r.map_to_target_read_stop),
+                     c, loci.get(rid, float('nan'))))
+        idx.append(r.Index)
+    print(f'  re-aligning at {sum(len(x[5]) for x in rows):,} candidate loci ({cpus} processes) ...')
+    with Pool(cpus, initializer=_init_worker, initargs=(genome_fa,)) as pool:
+        res = pool.map(_contig_anywhere, rows, chunksize=100)
+    df.loc[idx, 'genome_contiguity'] = [x[0] for x in res]
+    df.loc[idx, 'genome_loci'] = [x[1] for x in res]
+    # Never weaker than the local check: the wider window here can let a different local
+    # alignment win (~0.3% of locally contiguous calls), so fold those in explicitly.
+    if 'read_contiguous' in df:
+        df.loc[df.read_contiguous.eq(True), 'genome_contiguity'] = 'contiguous'
     return df
 
 
@@ -376,6 +513,11 @@ def main():
     p.add_argument('--genome-fa', default=None,
                    help='Genome FASTA (with .fai) for the contiguity flags. Default: $GENOME_FA, '
                         'else the one fetch_refs.sh puts in ref/chimeric/<gtag>/.')
+    p.add_argument('--genome-index', default=os.environ.get('GENOME_INDEX', ''),
+                   help='STAR index of the genome, for the genome-wide contiguity check. '
+                        'Default: $GENOME_INDEX. Needs the RAM to load it.')
+    p.add_argument('--star', default=None,
+                   help='STAR executable. Default: $STAR, the project pixi env, then PATH.')
     p.add_argument('--cpus', type=int, default=int(os.environ.get('CPUS') or os.cpu_count() or 1),
                    help='Processes for the contiguity alignments, default: %(default)s.')
     p.add_argument('--annotated', default='',
@@ -390,11 +532,15 @@ def main():
     # and the tool lookup should not run when an explicit path was given.
     args.gtf = args.gtf or os.environ.get('GENCODE') or default_gtf(args.gtag)
     args.genome_fa = args.genome_fa or os.environ.get('GENOME_FA') or default_genome_fa(args.gtag)
+    args.star = find_tool('STAR', args.star)
 
     if args.annotated:
         df = pd.read_csv(args.annotated, sep='\t', low_memory=False)
         print(f'Re-flagging {df.shape[0]:,} chimeras from {args.annotated}')
         df = artefact_flags(df, args.gtag, args.genome_fa, args.cpus)
+        df.attrs['gtag'] = args.gtag
+        df = genome_contiguity(df, args.star, args.genome_index, args.genome_fa, args.cpus,
+                               os.path.abspath(args.out) + '.genome_work')
         df.to_csv(args.out, sep='\t', index=False)
         print(f'\nWrote {args.out}')
         summarise_flags(df)
@@ -415,6 +561,9 @@ def main():
     df = bed_annotate(df, args.gtag, args.gtf, args.source_bed, args.rmsk,
                       args.bedtools, os.path.join(args.outdir, 'annotate_work'))
     df = artefact_flags(df, args.gtag, args.genome_fa, args.cpus)
+    df.attrs['gtag'] = args.gtag
+    df = genome_contiguity(df, args.star, args.genome_index, args.genome_fa, args.cpus,
+                           os.path.join(args.outdir, 'genome_contiguity_work'))
     df.to_csv(args.out, sep='\t', index=False)
     print(f'\nWrote {args.out}')
 
@@ -451,12 +600,14 @@ def summarise_flags(df):
     g = df[df.target_arm_aligned.eq(True)] if 'target_arm_aligned' in df else df.iloc[:0]
     if g.empty:
         return
-    any_flag = g.guide_low_complexity.eq(True) | g.guide_near_target.eq(True)
+    gw = g.genome_contiguity.isin(['contiguous', 'too many loci'])
+    any_flag = g.guide_low_complexity.eq(True) | g.guide_near_target.eq(True) | gw
     t = pd.DataFrame({
         'aligned': g.groupby('guide_class').size(),
         'low_complexity': g.guide_low_complexity.eq(True).groupby(g.guide_class).mean(),
         'contiguous': g.read_contiguous.eq(True).groupby(g.guide_class).mean(),
         'near_target': g.guide_near_target.eq(True).groupby(g.guide_class).mean(),
+        'genome-wide': gw.groupby(g.guide_class).mean(),
         'unflagged': (~any_flag).groupby(g.guide_class).mean(),
     })
     print('\n=== artefact flags, genomic chimeras whose target arm re-aligned ===')
