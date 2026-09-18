@@ -27,6 +27,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from paths import find_input, find_tool, proj
 
 CONF = 0.95
+SRC_NOTE = 'Song et al. 2025, Genome Biology, doi:10.1186/s13059-025-03508-7'
+MANAKOV = 'Manakov et al. 2022, bioRxiv, doi:10.1101/2022.02.13.480296'
 # A guide class, stratum or guide is only said to carry real chimeras when the upper
 # bound of its false-positive share is below this. 1.0 = "input cannot explain all of it".
 SIGNAL = 1.0
@@ -35,8 +37,9 @@ SIGNAL = 1.0
 def share_ci(x, y, n1, n2, conf=CONF):
     """Estimated false-positive share of the IP calls, (y/n2) / (x/n1), with an exact CI.
 
-    The size-matched input skips the on-bead chimeric ligation, so every chimera called
-    in it is a pipeline or library-prep artefact. Its per-read rate, set against the IP's,
+    The input control is assumed not to go through the chimeric ligation (the protocol does
+    not say either way), so every chimera called in it is treated as a pipeline or
+    library-prep artefact. Its per-read rate, set against the IP's,
     estimates what share of the IP calls those same artefacts account for -- on the
     assumption that artefacts arise at the same rate per trimmed read in both libraries.
 
@@ -65,7 +68,7 @@ def poisson_ci(k, conf=CONF):
 def verdict(hi):
     """What the upper bound of the false-positive share supports -- and no more.
 
-    The input cannot see artefacts of the on-bead ligation itself, so a call the input
+    The input cannot see artefactual chimeras that form after lysis, so a call the input
     does not explain is IP-specific: necessary for real pairing, not sufficient. The
     labels say that rather than "real"."""
     if hi != hi:  # NaN: no IP calls
@@ -325,7 +328,7 @@ def main():
 
     o.append('## Samples\n')
     samp = pd.DataFrame({
-        'role': ['IP', 'input (no ligation: false-positive control)'],
+        'role': ['IP', 'input (assumed unligated: false-positive control)'],
         'GSM': ['GSM8521923', 'GSM8521922'],
         'raw reads': [n_ip.get('raw', 0), n_ct.get('raw', 0)],
         'after trimming': [n_ip.get('trimmed', 0), n_ct.get('trimmed', 0)],
@@ -359,19 +362,34 @@ def main():
     have_alu = 'AluACA' in classes
 
     o.append('## What the input control measures\n')
-    o.append(f"""The size-matched input skips the on-bead chimeric ligation, so it should contain no
-chimeras. Every chimera the pipeline calls there is therefore a false positive, from the
-pipeline or from library preparation. That changes what the input is for: it does not
-give a background *rate of chimera formation* to divide by, it gives a measured
-*false-positive rate* for the calling procedure.
+    rr_ip = int(((U_ip.guide_class == 'snoRNA') & (U_ip.target_class == 'rRNA')).sum())
+    rr_ct = int(((U_ct.guide_class == 'snoRNA') & (U_ct.target_class == 'rRNA')).sum())
+    rr_ipm, rr_ctm = 1e6 * rr_ip / N1, 1e6 * rr_ct / N2
+    rr_fold = (f'a {rr_ipm / rr_ctm:,.0f}-fold difference' if rr_ct
+               else 'with none at all in the input')
+    o.append(f"""The chimeric ligation is performed on the beads after immunoprecipitation, and the input
+control is 2% of the sample saved before the IP ({SRC_NOTE}, methods). Neither that paper
+nor the GEO protocol says whether the input then goes through the chimeric ligation.
+**This report assumes it does not**, and treats every chimera called in the input as a
+false positive from the pipeline or from library preparation.
+
+The data are consistent with that assumption but do not prove it. snoRNA-guided rRNA
+chimeras, the canonical DKC1 pairing, occur at {rr_ipm:,.1f} usable calls per million trimmed
+reads in the IP against {rr_ctm:,.1f} in the input, {rr_fold}. Ligation of a dilute lysate
+that simply worked badly would also give few chimeras. If the assumption is wrong, the
+input contains some real chimeras, and every false-positive share below is an
+overestimate -- the direction that makes a signal harder, not easier, to find.
+
+Under the assumption, the input does not give a background *rate of chimera formation*
+to divide by; it gives a *false-positive rate* for the calling procedure.
 
 This report therefore does two things. It removes the artefacts the input calls turned
 out to be (the flags from `annotate_chimeras.py`, below), and it uses what is left in the
 input to estimate the **false-positive share** of the IP calls: the input's calls per
 million trimmed reads divided by the IP's. A share whose 95% upper bound is below 100%
 means the input cannot account for all of the IP calls: some are **IP-specific**. That is
-necessary for real pairing but not sufficient, because artefacts of the on-bead ligation
-are IP-specific too (see chrM). A share whose upper bound is at or above 100% means the
+necessary for real pairing but not sufficient, because artefactual chimeras that form
+after lysis are IP-specific too (see chrM). A share whose upper bound is at or above 100% means the
 data cannot distinguish that class from the artefacts the input does measure.
 
 Arithmetically the share is the inverse of an IP/input rate ratio. What changes is the
@@ -380,9 +398,14 @@ reported as an upper bound instead of being replaced by 0.5.
 
 Two assumptions limit it. Artefacts must arise at the same rate per trimmed read in both
 libraries, and the libraries did not trim alike ({100 * n_ip.get('trimmed', 0) / max(n_ip.get('raw', 1), 1):.0f}% of IP reads survived trimming,
-{100 * n_ct.get('trimmed', 0) / max(n_ct.get('raw', 1), 1):.0f}% of input reads), so the share is an estimate, not a measurement. And the input
-lacks the ligation step, so it cannot measure artefacts *of* ligation -- abundant RNAs
-joined at random on the bead. Those are estimated separately from chrM, below.
+{100 * n_ct.get('trimmed', 0) / max(n_ct.get('raw', 1), 1):.0f}% of input reads), so the share is an estimate, not a measurement. And, under the
+assumption above, the input cannot measure chimeras that form after lysis between RNAs
+that were not paired in the cell. Those are documented for chimeric eCLIP: mixing human
+and rat lysates before an AGO2 IP gave 8.6% of human miRNA chimeras with rat targets,
+against a 1.2% baseline, and diluting the beads lowered the rate without reaching
+significance, so crowding on the beads and complexes meeting new RNA after lysis were not
+separated ({MANAKOV}). That rate was measured for AGO2 and may differ for DKC1. The part
+of it this data can see is estimated from chrM, below.
 """)
 
     o.append('### Artefact flags\n')
@@ -450,15 +473,14 @@ joined at random on the bead. Those are estimated separately from chrM, below.
                      f'their genomic share is {_pct(res[("AluACA", a.gtag)][3])}: the input makes '
                      'more AluACA calls per trimmed read than the IP does. If artefacts arose at the '
                      'same per-read rate in both libraries that could not happen, so for this class '
-                     'they do not -- the input library, not ligation, is the larger source of '
-                     'AluACA calls. Every AluACA share in this report is therefore uncalibrated, '
+                     'they do not -- the input library is the larger source of AluACA calls. Every AluACA share in this report is therefore uncalibrated, '
                      'and the bias can differ between strata: a stratum below 100% further down is '
                      'a lead, not a measurement.\n')
         if ('AluACA', a.gtag) in res and res[('AluACA', a.gtag)][4] >= SIGNAL:
             o.append('That is not the same as saying AluACAs do not pair with DKC1 targets. '
                      'It says that, at this input depth and with the artefacts identified so '
                      'far, any real AluACA chimeras cannot be separated from the calls the '
-                     'input shows the pipeline makes without ligation. The rows and strata below '
+                     'pipeline makes in the input. The rows and strata below '
                      'test whether a subset can be.\n')
 
     # ---- per guide -----------------------------------------------------------
@@ -556,7 +578,7 @@ carrying most calls -- is a sign that particular sequences, not pairing, generat
                                  f'{_pct(strat[("AluACA", l)][4])}, {strat[("AluACA", l)][0]:,} IP calls)'
                                  for l in sig)
                      + '. These are the only places AluACA calls are IP-specific. IP-specific '
-                       'includes ligation artefacts, so each still needs the duplex test before '
+                       'includes chimeras formed after lysis, so each still needs the duplex test before '
                        'it is read as pairing.'
                      + (' Given the failed assumption above, treat them as leads: the share is '
                         'not calibrated for AluACA guides.' if alu_uncal else '') + '\n')
@@ -604,10 +626,10 @@ availability of antisense Alus; this comparison does not use the input.
 
     # ---- chrM ----------------------------------------------------------------
     # Dyskerin is nuclear, so a guide:mitochondrial-RNA duplex is not physically available
-    # and every usable chrM call is an artefact. The input already measures non-ligation
-    # artefacts; chrM calls the input does NOT explain are ligation artefacts -- the one
-    # kind the input cannot see.
-    o.append('## chrM: the ligation-artefact floor\n')
+    # and every usable chrM call is an artefact. The input measures the pipeline and
+    # library-prep artefacts; chrM calls it does NOT explain are IP-specific artefacts --
+    # chimeras formed after lysis, the kind the input cannot see.
+    o.append('## chrM: a floor for chimeras formed after lysis\n')
     MITO = ['chrM', 'MT', 'chrMT']
     mrows, mres = {}, {}
     for cls in [c for c in ('snoRNA', 'AluACA') if c in classes]:
@@ -632,12 +654,14 @@ availability of antisense Alus; this comparison does not use the input.
         if x:
             sent.append(f'{cls}: {x:,} usable chrM calls, of which the input accounts for an estimated '
                         f'{_pct(sh[0])} (upper {_pct(sh[2])}), leaving an estimated {excess:,.0f} '
-                        f'({100 * excess / max(n, 1):.2f}% of usable genomic IP calls) as ligation artefacts')
+                        f'({100 * excess / max(n, 1):.2f}% of usable genomic IP calls) as IP-specific artefacts')
     o.append(f"""
 A guide cannot pair with a mitochondrial RNA in vivo, so every chrM call is an artefact;
-the ones the input does not explain arose during ligation on the bead. {'; '.join(sent)}.
+the ones the input does not explain are IP-specific artefacts, formed after lysis --
+whether by crowding on the beads or by complexes meeting new RNA, which the chimeric
+eCLIP method paper could not separate. {'; '.join(sent)}.
 
-This is a floor, not an estimate of all ligation artefacts: it counts only partners that
+This is a floor, not an estimate of all post-lysis artefacts: it counts only partners that
 happen to be mitochondrial, and mitochondrial RNAs are a fraction of what is available
 for random joining. The nuclear equivalent cannot be separated from real pairing by
 counting reads. Whether a guide can form the >=8 bp bipartite duplex around a target

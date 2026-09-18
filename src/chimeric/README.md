@@ -197,8 +197,8 @@ Input tracked IP (snoRNA input +26.6 % against IP's +21.7 %), so the normalisati
 cancels — demonstrated here rather than assumed.
 
 These are IP/input rate ratios on unflagged calls, a statistic the report no longer
-uses: the input has no ligation step, so its chimeras are false positives rather than a
-background rate. They show the reference change was neutral; they are not evidence about
+uses: the input is assumed not to go through the chimeric ligation, so its chimeras are
+treated as false positives rather than a background rate. They show the reference change was neutral; they are not evidence about
 AluACA pairing. See the artefact flags under [Reading the output](#reading-the-output).
 
 The hg38 probe cannot check the published-locus column, because the published coordinates
@@ -366,8 +366,8 @@ so the bias applied equally and cancelled in the IP-vs-input comparison:
 | all | 2.60x | 2.61x |
 
 These are IP/input rate ratios on unflagged calls, a statistic the report no longer
-uses: the input has no ligation step, so its chimeras are false positives rather than a
-background rate. They show the reference change was neutral; they are not evidence about
+uses: the input is assumed not to go through the chimeric ligation, so its chimeras are
+treated as false positives rather than a background rate. They show the reference change was neutral; they are not evidence about
 AluACA pairing. See the artefact flags under [Reading the output](#reading-the-output).
 
 So absolute counts and individual gene assignments moved by 1-2%, while every conclusion
@@ -450,8 +450,23 @@ by `annotate_chimeras.py` into one TSV with:
   dominant false-positive mode for this particular question** and this column is the one
   to look at before believing any AluACA target.
 
-Artefact flags. The size-matched input skips the on-bead ligation, so every chimera
-called there is a false positive; these columns are what the input calls turned out to be.
+Artefact flags. The chimeric ligation is done on the beads after the IP, and the input
+control is 2% of the sample saved before the IP (Song et al. 2025, *Genome Biology*,
+[doi:10.1186/s13059-025-03508-7](https://doi.org/10.1186/s13059-025-03508-7), methods).
+Neither that paper nor the GEO protocol says whether the input then goes through the
+chimeric ligation. The analysis assumes it does not, and treats every chimera called in the
+input as a false positive; these columns are what the input calls turned out to be. The data
+fit the assumption (snoRNA-guided rRNA chimeras, the canonical pairing, are ~300x rarer per
+read in the input) without proving it. If it is wrong, the input holds some real chimeras
+and the report's false-positive shares are overestimates.
+
+The input cannot measure artefactual chimeras that form after lysis. Those are documented
+for chimeric eCLIP: mixing human and rat lysates before an AGO2 IP gave 8.6% of human miRNA
+chimeras with rat targets against a 1.2% baseline, and diluting the beads lowered the rate
+without reaching significance, so crowding on the beads was not separated from complexes
+meeting new RNA after lysis (Manakov et al. 2022,
+[doi:10.1101/2022.02.13.480296](https://doi.org/10.1101/2022.02.13.480296)). The report
+estimates the visible part of this from chrM.
 They need the genome FASTA (`--genome-fa`, `.fai` alongside), and the genome-wide check also
 needs the STAR index (`--genome-index`), so it runs where that index fits in RAM:
 

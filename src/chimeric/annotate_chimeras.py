@@ -26,9 +26,10 @@ itself does not:
          single largest repeat family and every AluACA is Alu-derived, so an
          Alu-to-Alu pairing is the dominant false-positive mode here.
 
-  4. Which chimeras are pipeline artefacts. The size-matched input skips the on-bead
-     ligation, so every chimera called there is a false positive, and these flags are
-     what the input calls turned out to be (see the README):
+  4. Which chimeras are pipeline artefacts. The input control is assumed not to go
+     through the chimeric ligation -- the protocol does not say, see the README -- so
+     every chimera called there is treated as a false positive, and these flags are
+     what the input calls turned out to be:
        * `guide_low_complexity` - the guide arm's DUST score is >= 2: it is a simple
          repeat (poly(A), (GA)n, (TG)n ...) that matches too many sequences to say which
          RNA it came from. AluACA records carry the A-rich Alu tail, so an mRNA 3' end
