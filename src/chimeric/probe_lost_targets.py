@@ -50,9 +50,12 @@ def read_target_table(path, stag):
     with open(path) as fh:
         head = next(csv.reader(fh))
     name_col = next((c for c in head if c.lower() in ('name', 'read_name', 'qname')), None)
-    guide_col = next((c for c in head if c == f'reference_{stag}'), None)
+    # find_putative_target writes it as plain "reference"; identify_chimeric_read renames
+    # it to reference_<stag> downstream, so accept either.
+    guide_col = next((c for c in head if c in (f'reference_{stag}', 'reference')), None)
     if not (name_col and guide_col):
-        sys.exit(f'{path}: need a read-name column and reference_{stag}; found {head}')
+        sys.exit(f'{path}: need a read-name column and reference_{stag} or reference; '
+                 f'found {head}')
     # Read names end with _<UMI>, and the FASTA headers add _<offset> on top, so the two
     # files can key on either form. Store both and let the lookup decide.
     out = {}
