@@ -258,23 +258,26 @@ antisense:sense is 5.05 for AluACA guides against 3.24 for snoRNA guides
 (Fisher p = 1.7e-01). snoRNA guides have no Alu complementarity, so theirs is the baseline
 availability of antisense Alus; this comparison does not use the input.
 
-## chrM: a floor for chimeras formed after lysis
+## chrM: chimeras that form after lysis
 
-| guide class | usable genomic IP | on chrM | chrM share (95% CI) | chrM in input | false-positive share of chrM calls | chrM calls input cannot explain | as share of usable genomic IP |
+| guide class | usable genomic IP | on chrM | chrM share (95% CI) | chrM in input | false-positive share of chrM calls | chrM calls input cannot explain | as share of usable genomic IP (not an artefact rate -- see below) |
 |---|---|---|---|---|---|---|---|
 | snoRNA | 21,818 | 711 | 3.26% (3.03% - 3.50%) | 1 | 1.1% (0.0% - 6.1%) | 703 | 3.22% |
 | AluACA | 1,782 | 50 | 2.81% (2.09% - 3.68%) | 0 | 0.0% (0.0% - 59.7%) | 50 | 2.81% |
 
-A guide cannot pair with a mitochondrial RNA in vivo, so every chrM call is an artefact;
-the ones the input does not explain are IP-specific artefacts, formed after lysis --
-whether by crowding on the beads or by complexes meeting new RNA, which the chimeric
-eCLIP method paper could not separate. snoRNA: 711 usable chrM calls, of which the input accounts for an estimated 1.1% (upper 6.1%), leaving an estimated 703 (3.22% of usable genomic IP calls) as IP-specific artefacts; AluACA: 50 usable chrM calls, of which the input accounts for an estimated 0.0% (upper 59.7%), leaving an estimated 50 (2.81% of usable genomic IP calls) as IP-specific artefacts.
+A guide cannot pair with a mitochondrial RNA in vivo, so every chrM call is an artefact,
+and the ones the input does not explain are chimeras formed after lysis -- whether by
+crowding on the beads or by complexes meeting new RNA, which the chimeric eCLIP method
+paper could not separate. snoRNA: 711 usable chrM calls, of which the input accounts for an estimated 1.1% (upper 6.1%), leaving an estimated 703 (3.22% of usable genomic IP calls) as IP-specific artefacts; AluACA: 50 usable chrM calls, of which the input accounts for an estimated 0.0% (upper 59.7%), leaving an estimated 50 (2.81% of usable genomic IP calls) as IP-specific artefacts.
 
-This is a floor, not an estimate of all post-lysis artefacts: it counts only partners that
-happen to be mitochondrial, and mitochondrial RNAs are a fraction of what is available
-for random joining. The nuclear equivalent cannot be separated from real pairing by
-counting reads. Whether a guide can form the >=8 bp bipartite duplex around a target
-uridine can, and that is the test these calls need next.
+What this establishes is that such chimeras exist in the IP and are essentially absent
+from the input, not how many there are in total.
+
+**These counts cannot be scaled into an artefact rate.** chrM holds 0.49% of mapped reads in this library, against 3.26% of snoRNA calls, 2.81% of AluACA calls -- 6.7x, 5.7x over-represented. chrM is small and paralogue-free, so a short arm from it places uniquely under `--outFilterMultimapNmax 1` where a nuclear arm of the same length often multimaps and is dropped. Reading the chrM share as the mitochondrial share of all post-lysis artefacts therefore implies impossible totals, and the correction is not known independently.
+
+The nuclear equivalent cannot be separated from real pairing by counting reads. Whether a
+guide can form the >=8 bp bipartite duplex around a target uridine can, and that is the
+test these calls need next.
 
 ## AluACA-mRNA candidate list
 

@@ -2,6 +2,7 @@ data/
 ref/
 work/
 psi-vault/
+tmp/
 
 # results are regenerable and large, so they stay out of the repo -- except the
 # generated write-up. Note the directory itself must not be excluded, or the
