@@ -468,7 +468,21 @@ meeting new RNA after lysis (Manakov et al. 2022,
 [doi:10.1101/2022.02.13.480296](https://doi.org/10.1101/2022.02.13.480296)). The report
 estimates the visible part of this from chrM.
 They need the genome FASTA (`--genome-fa`, `.fai` alongside), and the genome-wide check also
-needs the STAR index (`--genome-index`), so it runs where that index fits in RAM:
+needs a STAR index (`--contiguity-index`), so it runs where that index fits in RAM.
+
+**Use a different index for contiguity than for calling.** The two want opposite
+properties. Placing target arms needs a *minimal* reference, because the genome step runs
+`--outFilterMultimapNmax 1` and a duplicated sequence costs the read entirely — that is why
+the hg19 index here is built from the 25 main references. Contiguity assigns no locus, so
+extra copies only make a contiguous alignment easier to find, and running it against the
+stripped index hides precisely the transcripts the stripping removed (rDNA, via
+`GL000220.1`). Pass the fullest index available:
+
+```bash
+bash src/chimeric/run_all.sh arm3 --only annotate,report \
+    --genome-index ref/chimeric/hg19_chr25_star_index \
+    --contiguity-index ref/chimeric/hg19_star_index
+```
 
 - `guide_arm_len` — length of the guide arm in the read.
 - `guide_dust` — DUST score of the guide arm: counts of each overlapping 3-mer, summed as
@@ -488,6 +502,11 @@ needs the STAR index (`--genome-index`), so it runs where that index fits in RAM
 - `guide_near_target` — the guide arm aligns within 2 kb of the target arm in the same
   orientation (includes `read_contiguous`). Catches spliced or edited reads; weak for
   AluACA, as an Alu lies within 2 kb of most loci by chance.
+- `target_arm_short` — the target arm is shorter than `--min-target-arm` (default 25 nt).
+  The pipeline accepts 16 nt, but a fragment that short is placed uniquely in a 3 Gb genome
+  largely by chance, and the input's calls sit at exactly that length (median 23 nt against
+  43 nt in the IP). The threshold is a judgement call, so the report prints the whole length
+  series (*Sensitivity to the target-arm length threshold*) rather than only the chosen value.
 - `genome_contiguity` — `contiguous` if the whole read is contiguous at *any* locus, not
   just the reported one; `too many loci` if it maps to more than 500; otherwise `no`. STAR
   (local mode) proposes every locus the read aligns to, and each is re-aligned with the same

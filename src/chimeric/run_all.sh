@@ -132,9 +132,13 @@ step_annotate () {
     || echo "[annotate] no RepeatMasker BED at $RMSK_BED, skipping that flag"
   [ -s "$GENOME_FA" ] && bed_args+=(--genome-fa "$GENOME_FA" --cpus "$CPUS") \
     || echo "[annotate] no genome FASTA at $GENOME_FA, skipping the contiguity flags"
-  [ -f "$GENOME_INDEX/SA" ] && bed_args+=(--genome-index "$GENOME_INDEX") \
-    || echo "[annotate] no STAR index at $GENOME_INDEX, skipping the genome-wide contiguity" \
-            "check (make_report.py will refuse the tables without it)"
+  [ -f "$CONTIGUITY_INDEX/SA" ] && bed_args+=(--contiguity-index "$CONTIGUITY_INDEX") \
+    || echo "[annotate] no STAR index at $CONTIGUITY_INDEX, skipping the genome-wide" \
+            "contiguity check (make_report.py will refuse the tables without it)"
+  [ "$CONTIGUITY_INDEX" = "$GENOME_INDEX" ] && echo "[annotate] note: the contiguity check" \
+    "uses the same index that places targets ($GENOME_INDEX). If that index was stripped" \
+    "down, reads from the removed sequences cannot be shown contiguous; pass" \
+    "--contiguity-index with the fullest index available."
   for srr in "${SAMPLES[@]}"; do
     say "$ARM $srr annotate"
     "$PYTHON" "$SRC/annotate_chimeras.py" \

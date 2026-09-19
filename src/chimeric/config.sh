@@ -52,6 +52,9 @@ chimeric eCLIP pipeline - configuration flags
 
  indices
   --genome-index DIR STAR index for --species   [default: $REF/${SPECIES}_star_index]
+  --contiguity-index DIR  STAR index for the genome-wide contiguity flag; should be as
+                     complete as possible, unlike --genome-index which must be minimal
+                     so target arms place uniquely  [default: --genome-index]
   --repeat-index DIR RepBase STAR index         [default: $REF/repbase_star_index]
   --repeat-fa FILE   RepBase consensus FASTA    [default: $REF/repbase/human_repbase.fa]
   --sparse-d N       STAR --genomeSAsparseD. 1 = dense (~32 GB RAM to build,
@@ -106,7 +109,7 @@ All arms are dense. --sparse still works for a RAM-limited machine, but names th
 run <species>_<source>_sparse so it cannot overwrite a dense result.
 
 Environment variables of the same name in upper snake case (PROJ, REF, DATA,
-WORK, OUT, SPECIES, ARM, SOURCE, SOURCE_FASTA, CPUS, SRRS, GENOME_INDEX,
+WORK, OUT, SPECIES, ARM, SOURCE, SOURCE_FASTA, CPUS, SRRS, GENOME_INDEX, CONTIGUITY_INDEX,
 REPEAT_INDEX, REPEAT_FA, SPARSE_D, GEN_RAM, SJDB_OVERHANG, HG38_DIR, GENOME_FA,
 GENCODE, RMSK_BED, GUIDE_BED, ADAPTERS, TARGET_FASTA, TARGET_TAGS, ALU_FASTA,
 PUBLISHED, BIN, PYTHON, BEDTOOLS) are honoured as defaults; flags win over them.
@@ -138,6 +141,7 @@ while [ "$#" -gt 0 ]; do
     --fastq)          FASTQ="$2";          shift 2 ;;
     --source-bed)     SOURCE_BED="$2";     shift 2 ;;
     --genome-index)   GENOME_INDEX="$2";   shift 2 ;;
+    --contiguity-index) CONTIGUITY_INDEX="$2"; shift 2 ;;
     --repeat-index)   REPEAT_INDEX="$2";   shift 2 ;;
     --repeat-fa)      REPEAT_FA="$2";      shift 2 ;;
     --sparse-d)       SPARSE_D="$2"; _flag_density=1; shift 2 ;;
@@ -397,6 +401,7 @@ RMSK_BED="${RMSK_BED:-$REF/rmsk.$SPECIES.bed}"
 GUIDE_BED="${GUIDE_BED:-$REF/guide_loci.$SPECIES.bed}"
 
 GENOME_INDEX="${GENOME_INDEX:-$REF/${SPECIES}_star_index}"
+CONTIGUITY_INDEX="${CONTIGUITY_INDEX:-$GENOME_INDEX}"
 REPEAT_INDEX="${REPEAT_INDEX:-$REF/repbase_star_index}"
 [ -n "${REPEAT_FA:-}" ] || _cfg_input human_repbase.fa REPEAT_FA "$REF/repbase" "$REF"
 
@@ -468,12 +473,12 @@ _cfg_abs() {   # _cfg_abs <varname> ...
   done
 }
 _cfg_abs PROJ REF DATA WORK OUT HG38_DIR REF_SPECIES_DIR CHIMERIC_REF_DIR \
-         GENOME_INDEX REPEAT_INDEX REPEAT_FA GENOME_FA GENCODE RMSK_BED \
+         GENOME_INDEX CONTIGUITY_INDEX REPEAT_INDEX REPEAT_FA GENOME_FA GENCODE RMSK_BED \
          GUIDE_BED ADAPTERS TARGET_FASTA ALU_FASTA PUBLISHED SOURCE_FASTA \
          SOURCE_BED OUTDIR FASTQ
 
 export PROJ SRC REF DATA WORK OUT SPECIES ARM SOURCE SOURCE_FASTA CPUS SRRS IP \
-       GENOME_INDEX REPEAT_INDEX REPEAT_FA SPARSE_D GEN_RAM SJDB_OVERHANG \
+       GENOME_INDEX CONTIGUITY_INDEX REPEAT_INDEX REPEAT_FA SPARSE_D GEN_RAM SJDB_OVERHANG \
        HG38_DIR REF_SPECIES_DIR GENOME_FA GENCODE RMSK_BED GUIDE_BED \
        GENOME_FA_NAME GENCODE_NAME GENCODE_SUBDIR GENCODE_RELEASE \
        GENCODE_URL UCSC_URL \

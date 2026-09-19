@@ -34,6 +34,9 @@ itself does not:
          repeat (poly(A), (GA)n, (TG)n ...) that matches too many sequences to say which
          RNA it came from. AluACA records carry the A-rich Alu tail, so an mRNA 3' end
          plus its poly(A) tail is otherwise called an AluACA chimera.
+       * `target_arm_short` - the target arm is below --min-target-arm. A short arm is
+         placed uniquely in a 3 Gb genome largely by chance, and the input's calls sit at
+         exactly that length (median 23 nt against 43 nt in the IP).
        * `genome_contiguity` - the whole read aligned against the entire genome with
          STAR: `contiguous` if one alignment anywhere covers both arms, `too many loci`
          if it maps to more places than can be listed, else `no`. Catches multi-copy
@@ -242,6 +245,9 @@ def bed_annotate(df, gtag, gtf, source_bed, rmsk, bedtools, workdir):
 # calls do not hinge on the exact cut-offs.
 DUST_MAX = 2.0      # guide arms scoring at or above this are simple repeats; costs the
                     # snoRNA control ~1.6% of its calls, removes all (GA)n / poly(A) arms
+MIN_TARGET_ARM = 25  # nt; the pipeline itself accepts 16, where a unique genomic
+                     # placement is largely chance. Not tuned on the AluACA result: the
+                     # report prints the whole length series so the dependence is visible.
 MIN_COV = 0.8       # share of an arm inside the local alignment
 MIN_IDENT = 0.9     # identity over the aligned columns
 FLANK = 30          # genome beyond guide-arm length either side of the target arm
@@ -328,11 +334,12 @@ def _flag_one(r):
     return True, False, near
 
 
-def artefact_flags(df, gtag, genome_fa, cpus):
+def artefact_flags(df, gtag, genome_fa, cpus, min_target_arm=MIN_TARGET_ARM):
     """Add the pipeline-artefact columns; see point 4 of the module docstring."""
     df['guide_arm_len'] = (df.map_to_snoRNA_read_stop - df.map_to_snoRNA_read_start + 1).astype(int)
     df['guide_dust'] = [round(dust(guide_arm(r)), 3) for r in df.itertuples()]
     df['guide_low_complexity'] = df.guide_dust.ge(DUST_MAX)
+    df['target_arm_short'] = df.map_to_target_length.lt(min_target_arm)
     cols = ('target_arm_aligned', 'read_contiguous', 'guide_near_target')
     for c in cols:
         df[c] = pd.Series(float('nan'), index=df.index, dtype=object)
@@ -393,7 +400,13 @@ def _contig_anywhere(r):
 
 
 def genome_contiguity(df, star, index, genome_fa, cpus, workdir):
-    """Add `genome_contiguity` and `genome_loci`; see the comment block above."""
+    """Add `genome_contiguity` and `genome_loci`; see the comment block above.
+
+    `index` is the contiguity index, which wants the opposite property to the index that
+    places targets: as complete as possible. Placement needs a minimal reference so arms
+    map uniquely under --outFilterMultimapNmax 1; contiguity assigns no locus, so extra
+    copies only make a contiguous alignment easier to find. Running this against a
+    stripped index hides exactly the transcripts the stripping removed."""
     df['genome_contiguity'] = pd.Series(float('nan'), index=df.index, dtype=object)
     df['genome_loci'] = pd.Series(float('nan'), index=df.index, dtype=object)
     if not index or not os.path.exists(os.path.join(index, 'SA')):
@@ -517,6 +530,13 @@ def main():
     p.add_argument('--genome-index', default=os.environ.get('GENOME_INDEX', ''),
                    help='STAR index of the genome, for the genome-wide contiguity check. '
                         'Default: $GENOME_INDEX. Needs the RAM to load it.')
+    p.add_argument('--contiguity-index', default=os.environ.get('CONTIGUITY_INDEX', ''),
+                   help='STAR index for the genome-wide contiguity check, which should be as '
+                        'complete as possible -- not the stripped index used to place targets. '
+                        'Default: $CONTIGUITY_INDEX, else --genome-index.')
+    p.add_argument('--min-target-arm', type=int, default=MIN_TARGET_ARM,
+                   help='Target arms shorter than this are flagged `target_arm_short`, '
+                        'default: %(default)s nt.')
     p.add_argument('--star', default=None,
                    help='STAR executable. Default: $STAR, the project pixi env, then PATH.')
     p.add_argument('--cpus', type=int, default=int(os.environ.get('CPUS') or os.cpu_count() or 1),
@@ -534,13 +554,14 @@ def main():
     args.gtf = args.gtf or os.environ.get('GENCODE') or default_gtf(args.gtag)
     args.genome_fa = args.genome_fa or os.environ.get('GENOME_FA') or default_genome_fa(args.gtag)
     args.star = find_tool('STAR', args.star)
+    args.contiguity_index = args.contiguity_index or args.genome_index
 
     if args.annotated:
         df = pd.read_csv(args.annotated, sep='\t', low_memory=False)
         print(f'Re-flagging {df.shape[0]:,} chimeras from {args.annotated}')
-        df = artefact_flags(df, args.gtag, args.genome_fa, args.cpus)
+        df = artefact_flags(df, args.gtag, args.genome_fa, args.cpus, args.min_target_arm)
         df.attrs['gtag'] = args.gtag
-        df = genome_contiguity(df, args.star, args.genome_index, args.genome_fa, args.cpus,
+        df = genome_contiguity(df, args.star, args.contiguity_index, args.genome_fa, args.cpus,
                                os.path.abspath(args.out) + '.genome_work')
         df.to_csv(args.out, sep='\t', index=False)
         print(f'\nWrote {args.out}')
@@ -561,9 +582,9 @@ def main():
 
     df = bed_annotate(df, args.gtag, args.gtf, args.source_bed, args.rmsk,
                       args.bedtools, os.path.join(args.outdir, 'annotate_work'))
-    df = artefact_flags(df, args.gtag, args.genome_fa, args.cpus)
+    df = artefact_flags(df, args.gtag, args.genome_fa, args.cpus, args.min_target_arm)
     df.attrs['gtag'] = args.gtag
-    df = genome_contiguity(df, args.star, args.genome_index, args.genome_fa, args.cpus,
+    df = genome_contiguity(df, args.star, args.contiguity_index, args.genome_fa, args.cpus,
                            os.path.join(args.outdir, 'genome_contiguity_work'))
     df.to_csv(args.out, sep='\t', index=False)
     print(f'\nWrote {args.out}')
@@ -602,10 +623,12 @@ def summarise_flags(df):
     if g.empty:
         return
     gw = g.genome_contiguity.isin(['contiguous', 'too many loci'])
-    any_flag = g.guide_low_complexity.eq(True) | g.guide_near_target.eq(True) | gw
+    any_flag = (g.guide_low_complexity.eq(True) | g.target_arm_short.eq(True)
+                | g.guide_near_target.eq(True) | gw)
     t = pd.DataFrame({
         'aligned': g.groupby('guide_class').size(),
         'low_complexity': g.guide_low_complexity.eq(True).groupby(g.guide_class).mean(),
+        'short_target_arm': g.target_arm_short.eq(True).groupby(g.guide_class).mean(),
         'contiguous': g.read_contiguous.eq(True).groupby(g.guide_class).mean(),
         'near_target': g.guide_near_target.eq(True).groupby(g.guide_class).mean(),
         'genome-wide': gw.groupby(g.guide_class).mean(),

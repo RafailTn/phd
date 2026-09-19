@@ -25,6 +25,7 @@ from scipy.stats import beta, chi2, fisher_exact
 # collection of scripts rather than an installed package, so put src/ on the path.
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from paths import find_input, find_tool, proj
+from annotate_chimeras import MIN_TARGET_ARM
 
 CONF = 0.95
 SRC_NOTE = 'Song et al. 2025, Genome Biology, doi:10.1186/s13059-025-03508-7'
@@ -101,8 +102,8 @@ def fp_cells(x, y, n1, n2):
 FP_COLS = ['IP', 'input', 'IP per M', 'input per M (95% CI)',
            'false-positive share (95% CI)', 'est. real IP chimeras', 'verdict']
 
-FLAGS = ('guide_low_complexity', 'target_arm_aligned', 'read_contiguous', 'guide_near_target',
-         'genome_contiguity')
+FLAGS = ('guide_low_complexity', 'target_arm_short', 'target_arm_aligned',
+         'read_contiguous', 'guide_near_target', 'genome_contiguity')
 
 
 def _flag(d, c):
@@ -112,14 +113,15 @@ def _flag(d, c):
 def usable(d, gtag):
     """Calls that survive the artefact flags from annotate_chimeras.py.
 
-    For every target: the guide arm must not be a simple repeat (DUST), and the whole
-    read must not align contiguously anywhere in the genome, nor map to too many loci
-    to check. A genomic call must also re-align at its reported locus (otherwise it
+    For every target: the guide arm must not be a simple repeat (DUST), the target arm
+    must not be too short to place (`target_arm_short`), and the whole read must not align
+    contiguously anywhere in the genome, nor map to too many loci to check. A genomic call must also re-align at its reported locus (otherwise it
     cannot be checked) and must not have its guide arm within 2 kb of the target."""
     genomic = d.target_class == gtag
     ok = ~_flag(d, 'target_arm_aligned') | _flag(d, 'guide_near_target')
     gw = d.genome_contiguity.isin(['contiguous', 'too many loci'])
-    return ~_flag(d, 'guide_low_complexity') & ~gw & ~(genomic & ok)
+    return (~_flag(d, 'guide_low_complexity') & ~_flag(d, 'target_arm_short')
+            & ~gw & ~(genomic & ok))
 
 
 def read_counts(outdir, uid):
@@ -420,19 +422,50 @@ of it this data can see is estimated from chrM, below.
             x = d[d.guide_class == cls]
             lowc = _flag(x, 'guide_low_complexity')
             gen = x.target_class == a.gtag
-            cont = ~lowc & x.genome_contiguity.eq('contiguous')
-            many = ~lowc & ~cont & x.genome_contiguity.eq('too many loci')
-            rest = ~lowc & ~cont & ~many
+            short = ~lowc & _flag(x, 'target_arm_short')
+            cont = ~lowc & ~short & x.genome_contiguity.eq('contiguous')
+            many = ~lowc & ~short & ~cont & x.genome_contiguity.eq('too many loci')
+            rest = ~lowc & ~short & ~cont & ~many
             unal = gen & rest & ~_flag(x, 'target_arm_aligned')
             near = gen & rest & ~unal & _flag(x, 'guide_near_target')
-            frows[f'{lib} {cls}'] = [len(x), int(lowc.sum()), int(cont.sum()), int(many.sum()),
-                                     int(unal.sum()), int(near.sum()), int(x.usable.sum()),
+            frows[f'{lib} {cls}'] = [len(x), int(lowc.sum()), int(short.sum()), int(cont.sum()),
+                                     int(many.sum()), int(unal.sum()), int(near.sum()),
+                                     int(x.usable.sum()),
                                      f'{100 * x.usable.mean():.1f}%' if len(x) else '']
     o.append(md_table(pd.DataFrame.from_dict(frows, orient='index', columns=[
-        'called', 'simple-repeat guide (DUST)', 'contiguous in the genome', 'too many loci',
-        'genomic, not re-aligned', 'genomic, guide within 2 kb', 'usable', 'usable share']),
-        'library / guide class'))
+        'called', 'simple-repeat guide (DUST)', 'short target arm', 'contiguous in the genome',
+        'too many loci', 'genomic, not re-aligned', 'genomic, guide within 2 kb', 'usable',
+        'usable share']), 'library / guide class'))
     o.append('')
+
+    # ---- how much the length threshold matters -------------------------------
+    # The threshold is a judgement call, so print the whole series rather than only the
+    # chosen value: a reader can see whether a conclusion depends on where it sits.
+    o.append('### Sensitivity to the target-arm length threshold\n')
+    base_ip = ip[ip.usable | _flag(ip, 'target_arm_short')]
+    base_ct = ctrl[ctrl.usable | _flag(ctrl, 'target_arm_short')]
+    lens = [16, 20, 25, 30, 35, 40]
+    srows = {}
+    for cls in [c for c in ('snoRNA', 'AluACA') if c in classes]:
+        for m in lens:
+            I = base_ip[(base_ip.guide_class == cls) & (base_ip.target_class == a.gtag)
+                        & (base_ip.map_to_target_length >= m)]
+            C = base_ct[(base_ct.guide_class == cls) & (base_ct.target_class == a.gtag)
+                        & (base_ct.map_to_target_length >= m)]
+            sh, lo, hi = share_ci(len(I), len(C), N1, N2)
+            srows[f'{cls}, arm >= {m} nt'] = [
+                len(I), len(C), round(1e6 * len(I) / N1, 1), round(1e6 * len(C) / N2, 1),
+                f'{_pct(sh)} ({_pct(lo)} - {_pct(hi)})' if len(I) else '', verdict(hi)]
+    o.append(md_table(pd.DataFrame.from_dict(srows, orient='index', columns=[
+        'IP', 'input', 'IP per M', 'input per M', 'false-positive share (95% CI)', 'verdict']),
+        'guide class, minimum target arm'))
+    o.append(f"""
+Every other flag is applied here; only the length cut varies. The report's tables use
+{MIN_TARGET_ARM} nt. The pipeline itself accepts 16 nt, where a unique placement in a 3 Gb genome
+is largely chance -- and the input's calls sit at that end, so raising the cut removes
+input calls much faster than IP calls. A conclusion that appears only below the chosen
+threshold is a conclusion about short arms, not about pairing.
+""")
 
     # ---- false-positive share by guide class ---------------------------------
     o.append('## False-positive estimate by guide class\n')
