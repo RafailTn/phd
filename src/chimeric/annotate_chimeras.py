@@ -55,6 +55,7 @@ itself does not:
 import argparse
 import glob
 import gzip
+import json
 import os
 import re
 import subprocess
@@ -483,6 +484,23 @@ def genome_contiguity(df, star, index, genome_fa, cpus, workdir):
     return df
 
 
+def write_provenance(out, args):
+    """Record what the flags were computed against, next to the table.
+
+    Which index the contiguity check ran on changes its result -- a stripped index cannot
+    show a read contiguous in the sequences it lacks -- so the report states it rather
+    than leaving the reader to ask.
+    """
+    prov = {'genome_index': args.genome_index, 'contiguity_index': args.contiguity_index,
+            'genome_fa': args.genome_fa, 'gtag': args.gtag,
+            'min_target_arm': args.min_target_arm, 'dust_max': DUST_MAX,
+            'min_cov': MIN_COV, 'min_ident': MIN_IDENT, 'near_window': NEAR,
+            'multimap_max': MULTIMAP_MAX}
+    with open(out + '.flags.json', 'w') as fh:
+        json.dump(prov, fh, indent=2, sort_keys=True)
+    return prov
+
+
 def default_gtf(gtag):
     """The annotation fetch_refs.sh downloads, under ref/chimeric/<build>/.
 
@@ -564,6 +582,7 @@ def main():
         df = genome_contiguity(df, args.star, args.contiguity_index, args.genome_fa, args.cpus,
                                os.path.abspath(args.out) + '.genome_work')
         df.to_csv(args.out, sep='\t', index=False)
+        write_provenance(args.out, args)
         print(f'\nWrote {args.out}')
         summarise_flags(df)
         return
@@ -587,6 +606,7 @@ def main():
     df = genome_contiguity(df, args.star, args.contiguity_index, args.genome_fa, args.cpus,
                            os.path.join(args.outdir, 'genome_contiguity_work'))
     df.to_csv(args.out, sep='\t', index=False)
+    write_provenance(args.out, args)
     print(f'\nWrote {args.out}')
 
     print('\n=== chimeras by guide class and target ===')

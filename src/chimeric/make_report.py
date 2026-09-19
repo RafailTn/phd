@@ -12,6 +12,7 @@ method rationale live in src/chimeric/README.md; this file is results only.
 """
 
 import argparse
+import json
 import os
 import re
 import shutil
@@ -327,6 +328,26 @@ def main():
              're-run it after any rerun rather than editing numbers here. '
              'The procedure, the reference build and every deviation from upstream '
              'are documented in [`src/chimeric/README.md`](../../src/chimeric/README.md).\n')
+
+    # What the flags were computed against. Which index the contiguity check used
+    # changes what it can find, so it belongs in the report, not in someone's memory.
+    prov = {}
+    pf = os.path.join(a.resdir, f'{a.ip}.annotated.tsv.flags.json')
+    if os.path.exists(pf):
+        with open(pf) as fh:
+            prov = json.load(fh)
+        rel = lambda p: os.path.relpath(p, proj()) if p and p.startswith(proj()) else (p or '—')
+        same = prov.get('contiguity_index') == prov.get('genome_index')
+        o.append('The artefact flags below were computed against:\n')
+        o.append(md_table(pd.DataFrame.from_dict({
+            'index that places target arms': [rel(prov.get('genome_index'))],
+            'index for the genome-wide contiguity flag': [
+                rel(prov.get('contiguity_index')) + (' — **the same stripped index, so reads '
+                'from the sequences it lacks cannot be shown contiguous**' if same else '')],
+            'minimum target arm': [f"{prov.get('min_target_arm')} nt"],
+            'guide-arm DUST threshold': [prov.get('dust_max')],
+        }, orient='index', columns=['value']), 'setting'))
+        o.append('')
 
     o.append('## Samples\n')
     samp = pd.DataFrame({
