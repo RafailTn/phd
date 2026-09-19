@@ -301,6 +301,11 @@ def main():
     p.add_argument('--bedtools', default=None,
                    help='bedtools executable. Default: $BEDTOOLS, the project '
                         'pixi env, then PATH.')
+    p.add_argument('--mito-share', type=float, default=None,
+                   help='chrM share of primary-mapped reads in the IP library, as a fraction '
+                        '(e.g. 0.0049). Used only to state how far chrM is over-represented '
+                        'among calls relative to the library; measure it with samtools idxstats '
+                        'on a subsample mapped with the masking settings.')
     p.add_argument('--gtag', default='hg38',
                    help='Genome target tag, as used by annotate_chimeras.py.')
     p.add_argument('--out', default=os.path.join(results, 'RESULTS.md'),
@@ -680,10 +685,13 @@ availability of antisense Alus; this comparison does not use the input.
 
     # ---- chrM ----------------------------------------------------------------
     # Dyskerin is nuclear, so a guide:mitochondrial-RNA duplex is not physically available
-    # and every usable chrM call is an artefact. The input measures the pipeline and
-    # library-prep artefacts; chrM calls it does NOT explain are IP-specific artefacts --
-    # chimeras formed after lysis, the kind the input cannot see.
-    o.append('## chrM: a floor for chimeras formed after lysis\n')
+    # and every usable chrM call is an artefact. chrM calls the input does not explain are
+    # therefore chimeras formed after lysis. Their NUMBER is not their rate: chrM is a
+    # small, paralogue-free sequence, so a short arm from it places uniquely under
+    # --outFilterMultimapNmax 1 far more often than a nuclear one, and chrM is
+    # over-represented among calls relative to its share of the library. Pass
+    # --mito-share to quantify that; do not scale these counts without it.
+    o.append('## chrM: chimeras that form after lysis\n')
     MITO = ['chrM', 'MT', 'chrMT']
     mrows, mres = {}, {}
     for cls in [c for c in ('snoRNA', 'AluACA') if c in classes]:
@@ -702,24 +710,37 @@ availability of antisense Alus; this comparison does not use the input.
     o.append(md_table(pd.DataFrame.from_dict(mrows, orient='index', columns=[
         'usable genomic IP', 'on chrM', 'chrM share (95% CI)', 'chrM in input',
         'false-positive share of chrM calls', 'chrM calls input cannot explain',
-        'as share of usable genomic IP']), 'guide class'))
+        'as share of usable genomic IP (not an artefact rate -- see below)']), 'guide class'))
     sent = []
     for cls, (n, x, y, sh, excess) in mres.items():
         if x:
             sent.append(f'{cls}: {x:,} usable chrM calls, of which the input accounts for an estimated '
                         f'{_pct(sh[0])} (upper {_pct(sh[2])}), leaving an estimated {excess:,.0f} '
                         f'({100 * excess / max(n, 1):.2f}% of usable genomic IP calls) as IP-specific artefacts')
+    over = ''
+    if a.mito_share:
+        rat = {c: (v[1] / v[0]) / a.mito_share for c, v in mres.items() if v[1]}
+        over = ('\n\n**These counts cannot be scaled into an artefact rate.** chrM holds '
+                f'{100 * a.mito_share:.2f}% of mapped reads in this library, against '
+                + ', '.join(f'{100 * mres[c][1] / mres[c][0]:.2f}% of {c} calls' for c in rat)
+                + ' -- ' + ', '.join(f'{r:.1f}x' for r in rat.values()) + ' over-represented. '
+                'chrM is small and paralogue-free, so a short arm from it places uniquely '
+                'under `--outFilterMultimapNmax 1` where a nuclear arm of the same length '
+                'often multimaps and is dropped. Reading the chrM share as the mitochondrial '
+                'share of all post-lysis artefacts therefore implies impossible totals, and '
+                'the correction is not known independently.')
     o.append(f"""
-A guide cannot pair with a mitochondrial RNA in vivo, so every chrM call is an artefact;
-the ones the input does not explain are IP-specific artefacts, formed after lysis --
-whether by crowding on the beads or by complexes meeting new RNA, which the chimeric
-eCLIP method paper could not separate. {'; '.join(sent)}.
+A guide cannot pair with a mitochondrial RNA in vivo, so every chrM call is an artefact,
+and the ones the input does not explain are chimeras formed after lysis -- whether by
+crowding on the beads or by complexes meeting new RNA, which the chimeric eCLIP method
+paper could not separate. {'; '.join(sent)}.
 
-This is a floor, not an estimate of all post-lysis artefacts: it counts only partners that
-happen to be mitochondrial, and mitochondrial RNAs are a fraction of what is available
-for random joining. The nuclear equivalent cannot be separated from real pairing by
-counting reads. Whether a guide can form the >=8 bp bipartite duplex around a target
-uridine can, and that is the test these calls need next.
+What this establishes is that such chimeras exist in the IP and are essentially absent
+from the input, not how many there are in total.{over}
+
+The nuclear equivalent cannot be separated from real pairing by counting reads. Whether a
+guide can form the >=8 bp bipartite duplex around a target uridine can, and that is the
+test these calls need next.
 """)
 
     # ---- target list -----------------------------------------------------------

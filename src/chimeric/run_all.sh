@@ -194,7 +194,10 @@ step_report () {
     arm3_hg19_merged) out=$OUT/RESULTS.hg19.md ;;
   esac
   say "$ARM report"
+  local rep_args=()
+  [ -n "${MITO_SHARE:-}" ] && rep_args+=(--mito-share "$MITO_SHARE")
   "$PYTHON" "$SRC/make_report.py" \
+    ${rep_args[@]+"${rep_args[@]}"} \
     --arm "$ARM" --resdir "$OUT/$ARM" \
     --ip "${SAMPLES[0]}" --input "${SAMPLES[1]}" \
     --published "$PUBLISHED" --rmsk "$RMSK_BED" \
