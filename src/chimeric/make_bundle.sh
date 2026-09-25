@@ -31,7 +31,7 @@ FILES=(
   deps/pixi.toml deps/pixi.lock
 )
 # Everything config.sh points at, as a path relative to the project root.
-for f in "$PLAIN" "$MERGED" "$ALU_FASTA" $TARGET_FASTA "$PUBLISHED" \
+for f in "$PLAIN" "$MERGED" "$ALU_FASTA" "$ALU_TSV" $TARGET_FASTA "$PUBLISHED" \
          "$ADAPTERS" "$REPEAT_FA" "$REF/guide_loci.hg38.bed"; do
   case "$f" in
     "$PROJ"/*) FILES+=("${f#"$PROJ"/}") ;;

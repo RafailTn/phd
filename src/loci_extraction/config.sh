@@ -32,8 +32,12 @@ AluACA -> hg38 pipeline - configuration flags
   --gencode FILE     GENCODE annotation GTF(.gz)
   --rmsk FILE        UCSC RepeatMasker table (tab-separated, gzipped ok)
                      required by step 09 only
-  --max-len N        drop union intervals of N nt or longer
-                     default 0 = no length filter
+  --max-len N        step 08: drop union intervals of N nt or longer
+                     default 0 = no length filter. 300 = a full-length Alu,
+                     and drops the 53 NapRNAdb rows longer than one.
+  --min-cov N        step 08: drop NapRNAdb rows whose Coverage column is
+                     below N. default 0 = no coverage filter. Blunt on its
+                     own -- see config.sh for what it actually removes.
 
   --csv FILE         napRNAdb Alu/L1 ACA CSV
   --polya-csv FILE   napRNAdb Alu/L1 polyA-pocket ACA CSV
@@ -57,8 +61,8 @@ AluACA -> hg38 pipeline - configuration flags
   -h, --help         show this and exit
 
 Environment variables of the same name in upper snake case (PROJ, OUT, WORK,
-HG38_DIR, HG38_FA, GENCODE, RMSK, MAXLEN, CSV, POLYA_CSV, PDF, FASTA, SNODB_TSV,
-FASTA_ID_BASE, BIN, BEDTOOLS, PYTHON, ACC_FROM, ACC_TO) are honoured as
+HG38_DIR, HG38_FA, GENCODE, RMSK, MAXLEN, MINCOV, CSV, POLYA_CSV, PDF, FASTA,
+SNODB_TSV, FASTA_ID_BASE, BIN, BEDTOOLS, PYTHON, ACC_FROM, ACC_TO) are honoured as
 defaults; flags win over them.
 USAGE
 }
@@ -77,6 +81,7 @@ while [ "$#" -gt 0 ]; do
     --gencode)   GENCODE="$2";   shift 2 ;;
     --rmsk)      RMSK="$2";      shift 2 ;;
     --max-len)   MAXLEN="$2";    shift 2 ;;
+    --min-cov)   MINCOV="$2";    shift 2 ;;
     --csv)       CSV="$2";       shift 2 ;;
     --polya-csv) POLYA_CSV="$2";  shift 2 ;;
     --snodb)     SNODB_TSV="$2";  shift 2 ;;
@@ -125,10 +130,23 @@ if [ -z "${GENCODE:-}" ]; then
 fi
 RMSK="${RMSK:-$HOME/Downloads/transposon_proj/data/hg38_rmsk.gtf.gz}"
 
-# Optional length filter on the union (step 08): a handful of NapRNAdb entries
-# span whole kilobases -- a host intron or a LINE, not an ACA RNA. 0 keeps
-# everything; --max-len 1000 drops the 9 kb-long NapRNAdb-only loci.
+# Optional plausibility filters on the union (step 08). Both default to 0 = off,
+# so a rerun reproduces the committed catalogue; step 08 warns when an
+# implausible interval survives.
+#
+# --max-len: a handful of NapRNAdb entries span whole kilobases -- a host intron
+# or a LINE, not an ACA RNA. 1000 drops the 9 kb-long NapRNAdb-only loci; 300
+# (one full-length Alu) drops 53 CSV rows and is the threshold that actually
+# targets the problem, since an H/ACA RNA is ~100-200 nt and the longest of
+# these span 3-8 separate RepeatMasker elements apiece.
+#
+# --min-cov: NapRNAdb's own support column. The oversized rows are also the
+# thinnest-supported (median Coverage 32 above 300 nt against 98 below it), but
+# the two are only weakly correlated (Spearman -0.21), so a coverage floor is a
+# blunt instrument: 50 removes 199 of 543 rows whose median length is 183 nt --
+# ordinary loci. Use it to tighten an already length-filtered set, not alone.
 MAXLEN="${MAXLEN:-0}"
+MINCOV="${MINCOV:-0}"
 
 # --- tools --------------------------------------------------------------
 # Prefer the project's pixi env when it exists; otherwise fall back to PATH so
@@ -196,7 +214,7 @@ ACC_TO="${ACC_TO:-HE856264}"
 # NCBI allows 3 requests/sec without an API key; steps that loop sleep 0.4s.
 NCBI_TOOL="${NCBI_TOOL:-claude_code}"
 
-export PROJ OUT WORK HG38_DIR HG38_FA GENCODE RMSK MAXLEN BIN BEDTOOLS PYTHON \
+export PROJ OUT WORK HG38_DIR HG38_FA GENCODE RMSK MAXLEN MINCOV BIN BEDTOOLS PYTHON \
        PDF CSV POLYA_CSV FASTA SNODB_TSV FASTA_ID_BASE \
        EUTILS ACC_FROM ACC_TO NCBI_TOOL
 

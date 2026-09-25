@@ -10,12 +10,32 @@
 # keeps the LONGER interval and joins both identifiers, so no locus is
 # represented by a truncated interval.
 #
-# An optional length filter drops intervals >= MAXLEN nt, for the handful of
-# NapRNAdb novel-ACA entries that run to several kb -- a host intron or a LINE
-# rather than an RNA. It is OFF by default (MAXLEN=0); --max-len 1000 enables
-# it and removes 9 loci. At a shared locus the kb-long partner is discarded
-# rather than the locus: the AluACA interval is used instead, so no AluACA is
-# lost either way.
+# Two optional plausibility filters on the NapRNAdb side, both OFF by default
+# so a rerun reproduces the committed catalogue. Whatever they leave behind,
+# the summary at the end warns about intervals longer than a full-length Alu.
+#
+#   --max-len N   drop intervals >= N nt. The NapRNAdb novel-ACA entries run up
+#                 to 6,859 nt -- a host intron or a LINE rather than an RNA, and
+#                 the longest span 3-8 separate RepeatMasker elements while being
+#                 annotated after just one of them. An H/ACA RNA is ~100-200 nt
+#                 and a full-length Alu ~300, so --max-len 300 removes 53 CSV
+#                 rows; --max-len 1000 removes only the 9 worst.
+#                 Applied AFTER the intersect, because both sets have lengths:
+#                 at a shared locus the kb-long partner is discarded rather than
+#                 the locus, so no AluACA is lost either way.
+#
+#   --min-cov N   drop CSV rows whose Coverage column is below N. Applied BEFORE
+#                 the intersect, because coverage is a property of the NapRNAdb
+#                 call alone -- the Jady deposits have none -- so a row failing
+#                 its own support threshold is not a locus to fall back to. A
+#                 shared locus survives as jady_aluaca via the -v intersects
+#                 below, so again no AluACA is lost. A missing or non-numeric
+#                 Coverage counts as 0 and is dropped whenever the filter is on.
+#
+# Why this matters downstream: step 08 writes one FASTA record per interval, and
+# the chimeric pipeline picks a read's guide by best bowtie2 hit across the whole
+# catalogue. A record's chance of winning scales with how much sequence it holds,
+# so a multi-kb interval collects guide assignments by area rather than identity.
 #
 # One genuine within-set duplicate is collapsed first: AluACA88 (HE856004) and
 # AluACA345 (HE856261) are byte-identical sequences deposited twice, both in
@@ -32,7 +52,13 @@
 source "$(dirname "$0")/config.sh"
 W="$WORK/union"; mkdir -p "$W"
 
-awk -F',' -v OFS='\t' 'NR>1{print $3,$4,$5,$2,$8,$7}' "$CSV" | sort -k1,1 -k2,2n > "$W/csv.bed"
+# CSV columns: 1 Browser, 2 napRNA ID, 3 Chrom, 4 Start, 5 End, 6 Coverage,
+# 7 Strand, 8 Length. The BED score column carries NapRNAdb's Length, not the
+# coverage, which is consumed here.
+awk -F',' -v OFS='\t' -v MINCOV="$MINCOV" -v N="$W/lowcov.n" '
+  NR>1 { if (MINCOV > 0 && $6+0 < MINCOV) { dropped++; next }
+         print $3,$4,$5,$2,$8,$7 }
+  END  { print dropped+0 > N }' "$CSV" | sort -k1,1 -k2,2n > "$W/csv.bed"
 sort -k1,1 -k2,2n "$OUT/AluACA_hg38.bed" > "$W/aluaca_raw.bed"
 
 # collapse identical-interval AluACA duplicates, joining the IDs with "|"
@@ -82,10 +108,22 @@ cut -f1-6 "$W/union.bed7" > "$OUT/AluACA_union_nr.bed"
       { s = s toupper($0) }
       END { if (n) print h "\n" s }' > "$OUT/AluACA_union_nr.fasta"
 
+# NB: config.sh sets -e, so these stay as explicit ifs -- a trailing
+# `[ test ] && cmd` would make this block exit 1 whenever the test is false.
+_filters=()
 if [ "${MAXLEN:-0}" -gt 0 ]; then
-  echo "[08] union summary  (length filter: intervals >= $MAXLEN nt dropped)"
+  _filters+=("intervals >= $MAXLEN nt dropped")
+fi
+if [ "${MINCOV:-0}" -gt 0 ]; then
+  _filters+=("NapRNAdb coverage < $MINCOV dropped: $(cat "$W/lowcov.n") row(s)")
+fi
+if [ "${#_filters[@]}" -gt 0 ]; then
+  # ${arr[*]} joins on the FIRST character of IFS only, so build the "; "
+  # separator explicitly rather than getting "a;b".
+  _msg=$(printf '%s; ' "${_filters[@]}"); _msg=${_msg%'; '}
+  echo "[08] union summary  ($_msg)"
 else
-  echo "[08] union summary  (no length filter)"
+  echo "[08] union summary  (no filters; --max-len / --min-cov are both 0)"
 fi
 cut -f7 "$W/union.bed7" | sort | uniq -c | awk '{printf "  %-16s %s\n",$2,$1}'
 echo "  union intervals:               $(wc -l < "$OUT/AluACA_union_nr.bed")"
@@ -94,3 +132,19 @@ echo "  residual same-strand overlaps: $(( $(wc -l < "$OUT/AluACA_union_nr.bed")
 echo "  duplicate names:               $(( $(cut -f4 "$OUT/AluACA_union_nr.bed" | wc -l) - $(cut -f4 "$OUT/AluACA_union_nr.bed" | sort -u | wc -l) ))"
 echo "  AluACA sequence not covered by the chosen interval:"
 awk -F'\t' '($9-$8)>=($3-$2) && ($2<$8 || $3>$9) {printf "    %-22s aluaca %s:%d-%d  kept %s:%d-%d\n",$4,$1,$2,$3,$7,$8,$9}' "$W/pairs.tsv"
+
+# An H/ACA RNA is ~100-200 nt and a full-length Alu ~300. Anything past that
+# becomes a FASTA record that wins guide assignment on length alone, so say so
+# rather than letting it through quietly.
+_over=$(awk -F'\t' '($3-$2)>=300' "$W/union.bed7" | wc -l)
+if [ "$_over" -gt 0 ]; then
+  echo "  !! $_over interval(s) >= 300 nt, longer than a full-length Alu."
+  echo "     Each becomes one FASTA record and collects guide assignments by"
+  echo "     sequence length rather than identity.  Re-run with --max-len 300."
+  awk -F'\t' '($3-$2)>=300{print $3-$2"\t"$4"\t"$1":"$2"-"$3"\t"$7}' "$W/union.bed7" \
+    | sort -k1,1nr | head -5 \
+    | awk -F'\t' '{printf "       %6d nt  %-30s %s  (%s)\n",$1,$2,$3,$4}'
+  if [ "$_over" -gt 5 ]; then
+    echo "       ... and $((_over - 5)) more"
+  fi
+fi

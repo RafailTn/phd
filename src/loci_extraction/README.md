@@ -247,13 +247,44 @@ column records which set each interval's coordinates actually came from:
 
 Zero residual overlaps on either strand, zero duplicate names.
 
-### The optional length filter (`--max-len`)
+### The optional plausibility filters (`--max-len`, `--min-cov`)
 
 Longest-wins admits some intervals that are hard to read as ACA RNAs. Eleven
 NapRNAdb novel-ACA entries run to whole kilobases (up to 6.9 kb) - more like a
-host intron or a LINE than an RNA. `--max-len N` drops intervals of N nt or
-more; it is **off by default** (`MAXLEN=0`), so the 765 loci above include all
-eleven.
+host intron or a LINE than an RNA. Both filters are **off by default**
+(`MAXLEN=0`, `MINCOV=0`), so a rerun reproduces the 765-locus set above; step 08
+prints a warning naming any interval longer than a full-length Alu that survives.
+
+| flag | drops | union size | longest record |
+|---|---|---|---|
+| *(none)* | - | 765 | 6859 nt |
+| `--max-len 1000` | 11 CSV rows | 756 | 913 nt |
+| `--max-len 300` | 53 CSV rows | 718 | 296 nt |
+| `--min-cov 20` | 40 CSV rows | 726 | 6859 nt |
+| `--max-len 300 --min-cov 20` | both | 695 | 296 nt |
+
+**343 loci carry a Jady AluACA in every one of these configurations.** The
+filters only ever remove NapRNAdb material; where a filtered CSV row shared a
+locus with an AluACA, the locus survives on the AluACA interval instead.
+
+**`--max-len 300` is the one that targets the actual problem.** An H/ACA RNA is
+~100-200 nt and a full-length Alu ~300, so anything past that is not a single
+Alu-derived RNA: the eleven kb-long intervals each span 3-8 separate
+RepeatMasker elements while being annotated after just one of them.
+`hsa-novel-ACA-652` is labelled `AluJb-Alu` over 6859 nt that are ~57% L1ME3A,
+with the named AluJb a 205 nt fragment at the edge. This matters downstream
+because step 08 writes one FASTA record per interval and the chimeric pipeline
+assigns a read's guide by best bowtie2 hit across the whole catalogue - a
+record's chance of winning scales with how much sequence it holds, so a
+multi-kb interval collects guide assignments by area rather than by identity.
+
+**`--min-cov` is blunt on its own.** NapRNAdb's `Coverage` column does flag the
+oversized rows - median 32 above 300 nt against 98 below it - but length and
+coverage are only weakly related (Spearman -0.21), so a coverage floor cuts
+mostly ordinary loci: `--min-cov 50` would remove 199 of 543 rows whose median
+length is 183 nt, and even `--min-cov 20` leaves the 6.9 kb record in place.
+Use it to tighten an already length-filtered set, not instead of one. A missing
+or non-numeric `Coverage` counts as 0 and is dropped whenever the filter is on.
 
 `--max-len 1000` gives a 756-locus set. Nine of the eleven are NapRNAdb-only
 and simply go. The other two, **AluACA233** / hsa-novel-ACA-472 (1785 nt) and

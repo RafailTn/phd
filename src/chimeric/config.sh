@@ -87,6 +87,11 @@ chimeric eCLIP pipeline - configuration flags
   --target-tag TAG   target RNA tag; repeatable  [default: rRNA snRNA tRNA]
   --alu-fasta FILE   FASTA naming the AluACA records
                                     [default: $DATA/AluACA_union_nr.fasta]
+  --alu-tsv FILE     union table with the `source` column, which splits Jady-backed
+                     from NapRNAdb-only loci. Read by column name: the .bed cannot
+                     substitute, since step 09 makes its 7th column repeat_family.
+                     Used by nonchimeric_coverage.py.
+                                    [default: $DATA/AluACA_union_nr.tsv]
   --published FILE   published hg19 chimeras CSV, for compare_to_published
                               [default: $DATA/DKC1_IP.snoRNA.hg19.chimeras.csv]
 
@@ -111,7 +116,7 @@ run <species>_<source>_sparse so it cannot overwrite a dense result.
 Environment variables of the same name in upper snake case (PROJ, REF, DATA,
 WORK, OUT, SPECIES, ARM, SOURCE, SOURCE_FASTA, CPUS, SRRS, GENOME_INDEX, CONTIGUITY_INDEX,
 REPEAT_INDEX, REPEAT_FA, SPARSE_D, GEN_RAM, SJDB_OVERHANG, HG38_DIR, GENOME_FA,
-GENCODE, RMSK_BED, GUIDE_BED, ADAPTERS, TARGET_FASTA, TARGET_TAGS, ALU_FASTA,
+GENCODE, RMSK_BED, GUIDE_BED, ADAPTERS, TARGET_FASTA, TARGET_TAGS, ALU_FASTA, ALU_TSV,
 PUBLISHED, BIN, PYTHON, BEDTOOLS) are honoured as defaults; flags win over them.
 USAGE
 }
@@ -158,6 +163,7 @@ while [ "$#" -gt 0 ]; do
     --target-fasta)   _cfg_targets+=("$2"); shift 2 ;;
     --target-tag)     _cfg_tags+=("$2");   shift 2 ;;
     --alu-fasta)      ALU_FASTA="$2";      shift 2 ;;
+    --alu-tsv)        ALU_TSV="$2";        shift 2 ;;
     --published)      PUBLISHED="$2";      shift 2 ;;
     --bin)            BIN="$2";            shift 2 ;;
     --python)         PYTHON="$2";         shift 2 ;;
@@ -332,6 +338,7 @@ fi
 # These two normally live under ref/ rather than data/, so it is tried first.
 [ -n "${ADAPTERS:-}" ]  || _cfg_input se.2.round.adapters.fasta ADAPTERS "$REF"
 [ -n "${ALU_FASTA:-}" ] || _cfg_input AluACA_union_nr.fasta ALU_FASTA
+[ -n "${ALU_TSV:-}" ]   || _cfg_input AluACA_union_nr.tsv   ALU_TSV
 [ -n "${PUBLISHED:-}" ] || _cfg_input DKC1_IP.snoRNA.hg19.chimeras.csv PUBLISHED
 
 # Target catalogues the guide arm is mapped against, tags in the same order.
@@ -474,7 +481,7 @@ _cfg_abs() {   # _cfg_abs <varname> ...
 }
 _cfg_abs PROJ REF DATA WORK OUT HG38_DIR REF_SPECIES_DIR CHIMERIC_REF_DIR \
          GENOME_INDEX CONTIGUITY_INDEX REPEAT_INDEX REPEAT_FA GENOME_FA GENCODE RMSK_BED \
-         GUIDE_BED ADAPTERS TARGET_FASTA ALU_FASTA PUBLISHED SOURCE_FASTA \
+         GUIDE_BED ADAPTERS TARGET_FASTA ALU_FASTA ALU_TSV PUBLISHED SOURCE_FASTA \
          SOURCE_BED OUTDIR FASTQ
 
 export PROJ SRC REF DATA WORK OUT SPECIES ARM SOURCE SOURCE_FASTA CPUS SRRS IP \
@@ -482,7 +489,7 @@ export PROJ SRC REF DATA WORK OUT SPECIES ARM SOURCE SOURCE_FASTA CPUS SRRS IP \
        HG38_DIR REF_SPECIES_DIR GENOME_FA GENCODE RMSK_BED GUIDE_BED \
        GENOME_FA_NAME GENCODE_NAME GENCODE_SUBDIR GENCODE_RELEASE \
        GENCODE_URL UCSC_URL \
-       ADAPTERS TARGET_FASTA TARGET_TAGS TARGET_RRNA_TAG ALU_FASTA PUBLISHED \
+       ADAPTERS TARGET_FASTA TARGET_TAGS TARGET_RRNA_TAG ALU_FASTA ALU_TSV PUBLISHED \
        BIN PYTHON BEDTOOLS CHIMERIC_REF_DIR OUTDIR FASTQ SOURCE_BED
 
 # --- preflight helpers --------------------------------------------------
